@@ -16,7 +16,8 @@ SYNC_INTERVAL="${BRIDGE_SYNC_INTERVAL:-3600}"
 echo "Starting sync loop (interval: ${SYNC_INTERVAL}s)"
 
 while true; do
-    "$SCRIPT_DIR/sync_bridge.sh"
+    # Sleep first since start.sh already does initial sync
     echo "$(date): Sleeping for ${SYNC_INTERVAL}s..."
     sleep "$SYNC_INTERVAL"
+    "$SCRIPT_DIR/sync_bridge.sh"
 done
