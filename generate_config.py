@@ -176,23 +176,29 @@ def generate_config(models: list[tuple[str, str]], config: dict, custom_models: 
         if model_id in custom_models:
             custom = custom_models[model_id]
 
-            # Allow custom sampler args to be appended
-            if 'sampler_args' in custom:
-                model_config['cmd'] = f"{cmd} {custom['sampler_args']}"
+            # Skip if entry has no value (just model name with nothing after)
+            if custom is None:
+                pass
+            else:
+                # Allow custom sampler args to be appended
+                if 'sampler_args' in custom:
+                    model_config['cmd'] = f"{cmd} {custom['sampler_args']}"
 
-            # Allow full cmd override
-            if 'cmd' in custom:
-                model_config['cmd'] = custom['cmd'].replace('${MODEL_PATH}', model_path)
+                # Allow full cmd override
+                if 'cmd' in custom:
+                    model_config['cmd'] = custom['cmd'].replace('${MODEL_PATH}', model_path)
 
-            # Allow other overrides (ttl, etc)
-            for key in ['ttl', 'proxy']:
-                if key in custom:
-                    model_config[key] = custom[key]
+                # Allow other overrides (ttl, etc)
+                for key in ['ttl', 'proxy']:
+                    if key in custom:
+                        model_config[key] = custom[key]
 
         llama_swap_config['models'][prefixed_id] = model_config
 
     # Add any custom-only models (not auto-discovered)
     for model_id, custom in custom_models.items():
+        if custom is None:
+            continue
         if model_id not in llama_swap_config['models']:
             if 'cmd' in custom:
                 llama_swap_config['models'][model_id] = {
