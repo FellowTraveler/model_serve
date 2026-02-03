@@ -9,97 +9,104 @@
 # Model names should NOT include the ls/ prefix
 # Model names come from the symlinks created by lm-studio-ollama-bridge
 # (check config.yaml for the exact names after running ./model sync)
+#
+# Sampler notes:
+#   --top-nsigma 1.5  Adaptive sampling based on logit std deviation
+#   --min-p 0.05      Filters tokens below 5% of top token probability
+#   --temp            Higher is fine with top-nsigma (1.0-1.2 for general, lower for code/mistral)
+#   top-p defaults to 1.0 (disabled) when not specified
 
 models:
   # ============================================================================
-  # Top-n-sigma sampling settings
-  # Uncomment models you want to use with top-n-sigma sampling
+  # General models (temp 1.2 - works well with top-nsigma + min-p)
   # ============================================================================
 
   # --- GPT-OSS Derestricted models ---
   # gpt-oss-120b-derestricted.mxfp4_moe-gguf:117b-unknown:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # gpt-oss-120b-derestricted-gguf:117b-unknown:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # gpt-oss-20b-derestricted-gguf:20.9b-unknown:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # gguf-mxfp4-gpt-oss-20b-derestricted:20.9b-unknown:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
 
   # --- Gemma models ---
   # gemma-3-27b-derestricted-gguf:27b-unknown:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # gemma3:12.2b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # gemma3:4.3b-f16:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # gemma3:27.4b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # medgemma3:27.0b-q4_k_m:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # translategemma:12.2b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # QAT models (Ollama "qat" = actual q4_0 quantization in GGUF):
   # gemma3:12.2b-q4_0:  # gemma3:12b-it-qat in Ollama
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # gemma3:4.3b-q4_0:  # gemma3:4b-it-qat in Ollama
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # gemma3:999.89m-q4_0:  # gemma3:1b-it-qat in Ollama
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
 
   # --- GLM models ---
   # glm-4.7-flash-gguf:29.9b-unknown:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # glm-4.7-flash-derestricted-gguf:29.9b-unknown:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
 
   # --- Qwen3 models ---
   # qwen3-vl:31.1b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # qwen3-next:79.7b-q4_k_m:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # qwen3:32.8b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # qwen3:32.8b-q4_k_m:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # qwen3:14.8b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # qwen3:8.2b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # qwen3:4.0b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # qwen3:2.0b-q4_k_m:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # qwen3:751.63m-q4_k_m:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
-
-  # --- Mistral models ---
-  # mistral-small3.2:24.0b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
-  # mistral-small3.2:24.0b-q4_k_m:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
-  # ministral-3:13.9b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
-  # ministral-3:8.9b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
-  # ministral-3:3.8b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
-  # devstral-small-2:24.0b-q8_0:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
-  # devstral-small-2:24.0b-q4_k_m:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
 
   # --- Llama models ---
   # llama3.2:3.2b-f16:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # llama3.2:1.2b-f16:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
   # llama3.3:70.6b-q6_k:
-  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
 
   # ============================================================================
-  # Example: Custom settings for coding model (lower temperature)
-  # codestral:22.2b-q8_0:
-  #   sampler_args: "--top-p 0.9 --temp 0.2"
-  #   ttl: 3600  # Keep loaded longer
+  # Mistral models (temp 0.7 - these models prefer lower temperature)
   # ============================================================================
+  # mistral-small3.2:24.0b-q8_0:
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+  # mistral-small3.2:24.0b-q4_k_m:
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+  # ministral-3:13.9b-q8_0:
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+  # ministral-3:8.9b-q8_0:
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+  # ministral-3:3.8b-q8_0:
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+
+  # ============================================================================
+  # Coding models (temp 0.4 - lower for more deterministic code generation)
+  # ============================================================================
+  # devstral-small-2:24.0b-q8_0:
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.4"
+  # devstral-small-2:24.0b-q4_k_m:
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.4"
+  # codestral:22.2b-q8_0:
+  #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.4"
+  #   ttl: 3600  # Keep loaded longer for coding sessions
