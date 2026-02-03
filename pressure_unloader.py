@@ -47,8 +47,8 @@ def unload_model(api_url: str, model_name: str) -> bool:
     """Request llama-swap to unload a specific model."""
     try:
         response = requests.post(
-            f"{api_url}/models/unload",
-            json={"model": model_name},
+            f"{api_url}/unload",
+            params={"model": model_name},
             timeout=30
         )
         response.raise_for_status()
