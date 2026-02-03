@@ -23,6 +23,7 @@ def get_config():
         'llama_swap_port': os.environ.get('LLAMA_SWAP_PORT', '5847'),
         'model_ttl': int(os.environ.get('MODEL_TTL', '1800')),
         'default_ctx_size': int(os.environ.get('DEFAULT_CTX_SIZE', '8192')),
+        'default_parallel': int(os.environ.get('DEFAULT_PARALLEL', '1')),  # Slots per model
         'model_prefix': os.environ.get('MODEL_PREFIX', 'ls/'),  # Prefix to distinguish from Ollama
     }
 
@@ -168,8 +169,11 @@ def generate_config(models: list[tuple[str, str]], config: dict, custom_models: 
         # Add prefix to distinguish from Ollama models
         prefixed_id = f"{prefix}{model_id}" if prefix else model_id
 
-        # Default command (--metrics enables /metrics endpoint for monitoring)
-        cmd = f"llama-server --host 127.0.0.1 --port ${{PORT}} --model {model_path} --ctx-size {ctx_size} --metrics"
+        # Default command
+        # --parallel: Number of slots (1 = single-user, saves memory)
+        # --metrics: Enables /metrics endpoint for monitoring
+        parallel = config['default_parallel']
+        cmd = f"llama-server --host 127.0.0.1 --port ${{PORT}} --model {model_path} --ctx-size {ctx_size} --parallel {parallel} --metrics"
 
         model_config = {
             'cmd': cmd,

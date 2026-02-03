@@ -127,6 +127,7 @@ curl -X POST "http://127.0.0.1:5847/unload?model=ls/gemma3:12.2b-q8_0"
 | `BRIDGE_SCRIPT` | (bundled) | Path to lm-studio-ollama-bridge (uses submodule by default) |
 | `MODEL_PREFIX` | `ls/` | Prefix for model names to distinguish from Ollama in Open WebUI |
 | `DEFAULT_CTX_SIZE` | 8192 | Default context size for models without custom settings |
+| `DEFAULT_PARALLEL` | 1 | Slots per model (1 = single-user, saves memory; 4 = multi-user) |
 | `BRIDGE_SYNC_INTERVAL` | 3600 | Seconds between automatic syncs (when using start.sh) |
 
 ### Model Naming
