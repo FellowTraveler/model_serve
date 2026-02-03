@@ -1,6 +1,9 @@
 # Environment files (may contain sensitive config)
 .env
 
+# Auto-generated config (contains machine-specific paths)
+config.yaml
+
 # Local binaries
 bin/
 
