@@ -108,16 +108,15 @@ def sync_bridge() -> bool:
     if bridge_script.startswith('~'):
         bridge_script = os.path.expanduser(bridge_script)
 
+    # Default to bundled submodule if not set
+    if not bridge_script:
+        bridge_script = str(SCRIPT_DIR / 'lm-studio-ollama-bridge' / 'lm-studio-ollama-bridge')
+
     print(f"\n=== Syncing to LM Studio ===\n")
 
-    if not bridge_script:
-        print("BRIDGE_SCRIPT not set in .env, skipping bridge sync")
-        print("Get it from: https://github.com/nicobrenner/lm-studio-ollama-bridge")
-        return False
-
     if not os.path.exists(bridge_script):
-        print(f"Warning: Bridge script not found: {bridge_script}")
-        print("Get it from: https://github.com/nicobrenner/lm-studio-ollama-bridge")
+        print(f"Warning: Bridge not found: {bridge_script}")
+        print("Run ./install.sh to build it")
         return False
 
     result = run_cmd([bridge_script], check=False)

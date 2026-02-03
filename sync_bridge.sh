@@ -19,17 +19,20 @@ BRIDGE_SCRIPT="${BRIDGE_SCRIPT/#\~/$HOME}"
 LLAMA_SWAP_PORT="${LLAMA_SWAP_PORT:-5847}"
 API_URL="http://127.0.0.1:${LLAMA_SWAP_PORT}"
 
+# Default to bundled submodule if not set
+if [ -z "$BRIDGE_SCRIPT" ]; then
+    BRIDGE_SCRIPT="$SCRIPT_DIR/lm-studio-ollama-bridge/lm-studio-ollama-bridge"
+fi
+
 # Step 1: Run bridge sync
 echo "$(date): Running Ollama-LM Studio bridge sync..."
 
-if [ -z "$BRIDGE_SCRIPT" ]; then
-    echo "$(date): BRIDGE_SCRIPT not set in .env, skipping bridge sync"
-elif [ -x "$BRIDGE_SCRIPT" ]; then
+if [ -x "$BRIDGE_SCRIPT" ]; then
     "$BRIDGE_SCRIPT"
     echo "$(date): Bridge sync completed"
 else
-    echo "$(date): Warning - Bridge script not found: $BRIDGE_SCRIPT"
-    echo "$(date): Get it from: https://github.com/nicobrenner/lm-studio-ollama-bridge"
+    echo "$(date): Warning - Bridge not found: $BRIDGE_SCRIPT"
+    echo "$(date): Run ./install.sh to build it"
 fi
 
 # Step 2: Regenerate config

@@ -15,27 +15,28 @@ Multi-model LLM inference server for macOS Apple Silicon. Serves multiple models
 - macOS with Apple Silicon (M1/M2/M3)
 - [Homebrew](https://brew.sh)
 - [Ollama](https://ollama.ai) installed
-- [lm-studio-ollama-bridge](https://github.com/nicobrenner/lm-studio-ollama-bridge) (for syncing Ollama models)
 
 ## Installation
 
 ```bash
-# Clone the repo
-git clone https://github.com/youruser/model_serve.git
+# Clone the repo with submodules
+git clone --recursive https://github.com/FellowTraveler/model_serve.git
 cd model_serve
 
 # Install dependencies (will prompt for sudo to install llama-swap)
 ./install.sh
-
-# Copy and edit environment config
-cp .env.example .env
-# Edit .env to set your BRIDGE_SCRIPT path
 
 # Generate config from existing Ollama models
 ./model sync
 
 # (Optional) Set up hourly auto-sync via cron
 ./setup_cron.sh
+```
+
+If you cloned without `--recursive`:
+```bash
+git submodule update --init --recursive
+./install.sh
 ```
 
 ## Usage
@@ -108,7 +109,7 @@ curl -X POST http://127.0.0.1:5847/models/unload \
 | `MODEL_TTL` | 1800 | Idle timeout in seconds (30 min) |
 | `MEMORY_PRESSURE_THRESHOLD` | 75 | Memory % to trigger auto-unload |
 | `MODELS_DIR` | ~/.cache/lm-studio/models | Where models are stored |
-| `BRIDGE_SCRIPT` | (none) | Path to lm-studio-ollama-bridge |
+| `BRIDGE_SCRIPT` | (bundled) | Path to lm-studio-ollama-bridge (uses submodule by default) |
 
 ### Custom Sampler Settings
 
@@ -129,7 +130,7 @@ Custom settings are preserved when regenerating `config.yaml`.
 ## How It Works
 
 1. **Ollama** downloads and manages model files
-2. **lm-studio-ollama-bridge** creates symlinks in LM Studio's model directory
+2. **lm-studio-ollama-bridge** (bundled submodule) creates symlinks in LM Studio's model directory
 3. **generate_config.py** scans for models and creates `config.yaml`
 4. **llama-swap** routes requests to the right model, spawning llama-server instances on demand
 5. **pressure_unloader.py** monitors memory and unloads models when needed
@@ -138,19 +139,20 @@ Custom settings are preserved when regenerating `config.yaml`.
 
 ```
 model_serve/
-├── model              # Main CLI (pull, rm, list, sync, run)
-├── start.sh           # Start the server stack
-├── stop.sh            # Stop all services
-├── status.sh          # Check running status
-├── install.sh         # Install dependencies
-├── setup_cron.sh      # Set up hourly auto-sync
-├── generate_config.py # Discover models → config.yaml
-├── sync_bridge.sh     # Bridge + regenerate + reload
-├── pressure_unloader.py # Memory pressure monitor
-├── config.yaml        # Auto-generated llama-swap config
-├── custom_models.yaml # Your custom sampler settings
-├── .env.example       # Environment template
-└── .env               # Your local config (git-ignored)
+├── model                      # Main CLI (pull, rm, list, sync, run)
+├── start.sh                   # Start the server stack
+├── stop.sh                    # Stop all services
+├── status.sh                  # Check running status
+├── install.sh                 # Install dependencies
+├── setup_cron.sh              # Set up hourly auto-sync
+├── generate_config.py         # Discover models → config.yaml
+├── sync_bridge.sh             # Bridge + regenerate + reload
+├── pressure_unloader.py       # Memory pressure monitor
+├── lm-studio-ollama-bridge/   # Submodule: Ollama-LM Studio sync tool
+├── config.yaml                # Auto-generated llama-swap config
+├── custom_models.yaml         # Your custom sampler settings
+├── .env.example               # Environment template
+└── .env                       # Your local config (git-ignored)
 ```
 
 ## Troubleshooting
@@ -173,6 +175,11 @@ which llama-swap
 ```bash
 # Check the model file exists
 ls -la ~/.cache/lm-studio/models/ollama/<model-name>/
+```
+
+**Bridge not built:**
+```bash
+./install.sh
 ```
 
 ## License

@@ -3,7 +3,35 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 echo "=== Installing Model Serve Dependencies ==="
+echo ""
+
+# Initialize submodules
+echo "Initializing submodules..."
+git submodule update --init --recursive
+echo "✓ Submodules initialized"
+echo ""
+
+# Build lm-studio-ollama-bridge
+BRIDGE_DIR="$SCRIPT_DIR/lm-studio-ollama-bridge"
+BRIDGE_BIN="$BRIDGE_DIR/lm-studio-ollama-bridge"
+
+if [ ! -x "$BRIDGE_BIN" ]; then
+    echo "Building lm-studio-ollama-bridge..."
+    if ! command -v go &> /dev/null; then
+        echo "Go not found. Installing via Homebrew..."
+        brew install go
+    fi
+    cd "$BRIDGE_DIR"
+    go build -o lm-studio-ollama-bridge ./cmd/lm-studio-ollama-bridge
+    cd "$SCRIPT_DIR"
+    echo "✓ lm-studio-ollama-bridge built"
+else
+    echo "✓ lm-studio-ollama-bridge already built"
+fi
 echo ""
 
 # Install llama.cpp via Homebrew
