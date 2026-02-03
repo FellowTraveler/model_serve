@@ -86,26 +86,27 @@ def create_model_name(dir_name: str, file_stem: str) -> str:
     stem_lower = file_stem.lower()
 
     # If the file stem starts with the dir name, extract the variant
-    # e.g., "gemma3/gemma3-12.2B-Q8_0" -> "gemma3:12.2b-q8_0"
+    # e.g., "gemma3/gemma3-12.2B-Q8_0" -> "gemma3-12.2b-q8_0"
+    # Note: Using dash instead of colon for compatibility with HTTP clients
     if stem_lower.startswith(dir_lower):
         variant = stem_lower[len(dir_lower):].lstrip('-_')
         if variant:
-            return sanitize_model_id(f"{dir_lower}:{variant}")
+            return sanitize_model_id(f"{dir_lower}-{variant}")
         return sanitize_model_id(dir_lower)
 
-    # Otherwise use dir:file format
-    return sanitize_model_id(f"{dir_lower}:{stem_lower}")
+    # Otherwise use dir-file format
+    return sanitize_model_id(f"{dir_lower}-{stem_lower}")
 
 
 def sanitize_model_id(name: str) -> str:
     """
     Convert a model name to a valid ID for llama-swap.
-    Preserves colons for Ollama-style naming.
+    Uses only alphanumeric, hyphens, dots, and underscores for HTTP compatibility.
     """
     model_id = name.lower()
 
-    # Replace invalid chars with hyphens (keep colons, dots, underscores)
-    model_id = re.sub(r'[^a-z0-9\-_.:]', '-', model_id)
+    # Replace invalid chars with hyphens (no colons - causes issues with HTTP clients)
+    model_id = re.sub(r'[^a-z0-9\-_.]', '-', model_id)
 
     # Collapse multiple hyphens
     model_id = re.sub(r'-+', '-', model_id)
