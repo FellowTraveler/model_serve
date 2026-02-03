@@ -2,13 +2,27 @@
 
 Multi-model LLM inference server for macOS Apple Silicon. Serves multiple models on a single OpenAI-compatible API endpoint with on-demand loading and automatic unloading.
 
+## Why This Exists
+
+**On-Demand + Keep-Loaded Behavior** - Loading large models (e.g., 120B) is expensive. We want models to load on first request and stay loaded until idle timeout or memory pressure—not reload on every request.
+
+**Single API Port** - Simplifies client code (agents, web apps). No need to manage multiple ports for different models. Just specify the model name in the API request.
+
+**Shared Model Directory** - Uses symlinked LM Studio models directory. No redundant storage—models downloaded via Ollama are served directly.
+
+**Pressure-Aware Unloading** - TTL-based unloading isn't enough. When memory is high, automatically unload idle models to prevent OOM.
+
+**Advanced Sampling** - Per-model control of top-n-sigma, min-p, temperature, etc. Different tasks benefit from different sampling behavior.
+
+**Native macOS Execution** - No Docker overhead. Native builds on Apple Silicon (M1/M2/M3) for maximum throughput and memory efficiency.
+
 ## Features
 
 - **Single API endpoint** - All models accessible via one port (OpenAI-compatible)
 - **On-demand loading** - Models load when first requested, not at startup
 - **Auto-unload** - Models unload after idle timeout (TTL) or memory pressure
 - **Ollama integration** - Pull/remove models with automatic config sync
-- **Custom samplers** - Configure per-model sampling parameters
+- **Custom samplers** - Configure per-model sampling parameters (ctx_size, temperature, etc.)
 
 ## Prerequisites
 
@@ -41,10 +55,17 @@ git submodule update --init --recursive
 
 ## Usage
 
-### Start the Server
+### Server Control
 
 ```bash
-./start.sh
+# Start the server (runs in background, logs to model_serve.log)
+./model start
+
+# Check if services are running
+./model status
+
+# Stop all services
+./model stop
 ```
 
 The server runs on port 5847 by default (configurable in `.env`).
@@ -81,10 +102,10 @@ The `stats` command shows all loaded models with context size, slots, state, and
 ======================================================================
 MODEL                                              CTX  SLOTS    STATE
 ======================================================================
-ls/gemma3:27.4b-q8_0                            32,768      4    ready
-ls/codestral:22.2b-q8_0                         32,768      4    ready
+ls/gemma3:27.4b-q8_0                            32,768      1    ready
+ls/codestral:22.2b-q8_0                         32,768      1    ready
 ======================================================================
-TOTAL                                           65,536      8
+TOTAL                                           65,536      2
 
 System Memory: 65.2% used (83.5GB / 128.0GB)
 ```

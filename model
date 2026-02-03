@@ -5,17 +5,21 @@ Unified model management for the model serving stack.
 Wraps Ollama commands and automatically syncs to LM Studio + regenerates config.
 
 Usage:
+    ./model start                  Start the server stack (runs in background)
+    ./model stop                   Stop all services
+    ./model status                 Check service status (processes running)
+    ./model stats                  Show loaded models with resource usage
     ./model pull <model-name>      Pull a model and sync
     ./model rm <model-name>        Remove a model and sync
     ./model list [filter]          List models (optional case-insensitive filter)
     ./model sync                   Just sync and regenerate config
     ./model run <model-name>       Run a model interactively (passthrough to ollama)
-    ./model stats                  Show running models with resource usage
 
 Examples:
-    ./model pull gemma3:27b
-    ./model list derestricted      # Shows only models containing "derestricted"
-    ./model list qwen              # Shows only models containing "qwen"
+    ./model start                  # Start server, logs to model_serve.log
+    ./model stats                  # See what's loaded and memory usage
+    ./model pull gemma3:27b        # Pull and auto-sync
+    ./model list derestricted      # Filter models by name
 """
 
 import os
@@ -421,6 +425,46 @@ def cmd_stats(args: list[str]):
         pass
 
 
+def cmd_start(args: list[str]):
+    """Start the server stack in background."""
+    log_file = SCRIPT_DIR / 'model_serve.log'
+
+    # Check if already running
+    result = subprocess.run(['pgrep', '-f', 'llama-swap.*--config'], capture_output=True)
+    if result.returncode == 0:
+        print("Server already running. Use './model stop' first or './model status' to check.")
+        return
+
+    print(f"Starting server stack...")
+    print(f"Logs: {log_file}")
+
+    # Start in background with output to log file
+    with open(log_file, 'a') as f:
+        subprocess.Popen(
+            [str(SCRIPT_DIR / 'start.sh')],
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            start_new_session=True
+        )
+
+    print("Server starting in background. Use './model status' to check.")
+
+
+def cmd_stop(args: list[str]):
+    """Stop all services."""
+    print("Stopping server stack...")
+    result = subprocess.run([str(SCRIPT_DIR / 'stop.sh')], check=False)
+    if result.returncode == 0:
+        print("Server stopped.")
+    else:
+        print("Stop may have encountered issues. Check './model status'.")
+
+
+def cmd_status(args: list[str]):
+    """Check service status."""
+    subprocess.run([str(SCRIPT_DIR / 'status.sh')], check=False)
+
+
 def cmd_help(args: list[str]):
     """Show help."""
     print(__doc__)
@@ -430,6 +474,9 @@ def main():
     load_env()
 
     commands = {
+        'start': cmd_start,
+        'stop': cmd_stop,
+        'status': cmd_status,
         'pull': cmd_pull,
         'rm': cmd_rm,
         'remove': cmd_rm,
