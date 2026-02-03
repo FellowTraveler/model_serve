@@ -24,16 +24,29 @@ fi
 
 LLAMA_SWAP_PORT="${LLAMA_SWAP_PORT:-5847}"
 
+# Find llama-swap (local bin or system)
+find_llama_swap() {
+    if [ -x "$SCRIPT_DIR/bin/llama-swap" ]; then
+        echo "$SCRIPT_DIR/bin/llama-swap"
+    elif command -v llama-swap &> /dev/null; then
+        command -v llama-swap
+    else
+        echo ""
+    fi
+}
+
+LLAMA_SWAP_BIN=$(find_llama_swap)
+
 # Check dependencies
 check_deps() {
     local missing=()
 
-    if ! command -v llama-swap &> /dev/null; then
-        missing+=("llama-swap")
+    if [ -z "$LLAMA_SWAP_BIN" ]; then
+        missing+=("llama-swap (run ./install.sh)")
     fi
 
     if ! command -v llama-server &> /dev/null; then
-        missing+=("llama-server (llama.cpp)")
+        missing+=("llama-server (brew install llama.cpp)")
     fi
 
     if ! command -v python3 &> /dev/null; then
@@ -45,9 +58,6 @@ check_deps() {
         for dep in "${missing[@]}"; do
             echo "  - $dep"
         done
-        echo ""
-        echo "Install with:"
-        echo "  brew install llama.cpp llama-swap"
         exit 1
     fi
 }
@@ -62,7 +72,8 @@ check_python_deps() {
 
 start_llama_swap() {
     echo "Starting llama-swap on port ${LLAMA_SWAP_PORT}..."
-    llama-swap --config config.yaml &
+    echo "Using: $LLAMA_SWAP_BIN"
+    "$LLAMA_SWAP_BIN" --config config.yaml --listen "0.0.0.0:${LLAMA_SWAP_PORT}" &
     LLAMA_SWAP_PID=$!
     echo "llama-swap PID: $LLAMA_SWAP_PID"
 }

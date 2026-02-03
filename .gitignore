@@ -1,6 +1,9 @@
 # Environment files (may contain sensitive config)
 .env
 
+# Local binaries
+bin/
+
 # Python
 __pycache__/
 *.py[cod]
