@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""
+Unified model management for the model serving stack.
+
+Wraps Ollama commands and automatically syncs to LM Studio + regenerates config.
+
+Usage:
+    ./model pull <model-name>    Pull a model and sync
+    ./model rm <model-name>      Remove a model and sync
+    ./model list                 List all available models
+    ./model sync                 Just sync and regenerate config
+    ./model run <model-name>     Run a model interactively (passthrough to ollama)
+"""
+
+import os
+import sys
+import subprocess
+from pathlib import Path
+
+
+SCRIPT_DIR = Path(__file__).parent.resolve()
+
+
+def load_env():
+    """Load .env file if it exists."""
+    env_file = SCRIPT_DIR / '.env'
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ.setdefault(key.strip(), value.strip())
+
+
+def run_cmd(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
+    """Run a command and return the result."""
+    print(f"$ {' '.join(cmd)}")
+    return subprocess.run(cmd, check=check)
+
+
+def ollama_pull(model_name: str) -> bool:
+    """Pull a model using Ollama."""
+    print(f"\n=== Pulling {model_name} via Ollama ===\n")
+    result = run_cmd(['ollama', 'pull', model_name], check=False)
+    return result.returncode == 0
+
+
+def ollama_rm(model_name: str) -> bool:
+    """Remove a model using Ollama."""
+    print(f"\n=== Removing {model_name} via Ollama ===\n")
+    result = run_cmd(['ollama', 'rm', model_name], check=False)
+    return result.returncode == 0
+
+
+def ollama_list() -> bool:
+    """List models in Ollama."""
+    result = run_cmd(['ollama', 'list'], check=False)
+    return result.returncode == 0
+
+
+def ollama_run(model_name: str) -> bool:
+    """Run a model interactively."""
+    print(f"\n=== Running {model_name} ===\n")
+    result = run_cmd(['ollama', 'run', model_name], check=False)
+    return result.returncode == 0
+
+
+def sync_bridge() -> bool:
+    """Run the Ollama-LM Studio bridge sync."""
+    bridge_script = os.environ.get(
+        'BRIDGE_SCRIPT',
+        '/Users/au/src/lm-studio-ollama-bridge/lm-studio-ollama-bridge'
+    )
+
+    print(f"\n=== Syncing to LM Studio ===\n")
+
+    if not os.path.exists(bridge_script):
+        print(f"Warning: Bridge script not found: {bridge_script}")
+        return False
+
+    result = run_cmd([bridge_script], check=False)
+    return result.returncode == 0
+
+
+def regenerate_config() -> bool:
+    """Regenerate llama-swap config."""
+    print(f"\n=== Regenerating config ===\n")
+
+    generate_script = SCRIPT_DIR / 'generate_config.py'
+    result = run_cmd([sys.executable, str(generate_script)], check=False)
+    return result.returncode == 0
+
+
+def reload_llama_swap() -> bool:
+    """Tell llama-swap to reload its config if running."""
+    port = os.environ.get('LLAMA_SWAP_PORT', '5847')
+    url = f"http://127.0.0.1:{port}/reload-config"
+
+    try:
+        import requests
+        response = requests.post(url, timeout=5)
+        if response.ok:
+            print("llama-swap config reloaded")
+            return True
+    except:
+        pass
+
+    print("llama-swap not running or reload failed (this is OK)")
+    return False
+
+
+def do_sync():
+    """Full sync: bridge + regenerate + reload."""
+    sync_bridge()
+    regenerate_config()
+    reload_llama_swap()
+
+
+def cmd_pull(args: list[str]):
+    """Handle pull command."""
+    if not args:
+        print("Usage: model pull <model-name>")
+        print("Example: model pull gemma3:12b")
+        sys.exit(1)
+
+    model_name = args[0]
+
+    if not ollama_pull(model_name):
+        print(f"\nFailed to pull {model_name}")
+        sys.exit(1)
+
+    do_sync()
+    print(f"\n=== Done! {model_name} is ready ===")
+
+
+def cmd_rm(args: list[str]):
+    """Handle rm command."""
+    if not args:
+        print("Usage: model rm <model-name>")
+        print("Example: model rm gemma3:12b")
+        sys.exit(1)
+
+    model_name = args[0]
+
+    if not ollama_rm(model_name):
+        print(f"\nFailed to remove {model_name}")
+        sys.exit(1)
+
+    do_sync()
+    print(f"\n=== Done! {model_name} removed ===")
+
+
+def cmd_list(args: list[str]):
+    """Handle list command."""
+    ollama_list()
+
+
+def cmd_sync(args: list[str]):
+    """Handle sync command."""
+    do_sync()
+    print("\n=== Sync complete ===")
+
+
+def cmd_run(args: list[str]):
+    """Handle run command (passthrough to ollama)."""
+    if not args:
+        print("Usage: model run <model-name>")
+        sys.exit(1)
+
+    ollama_run(args[0])
+
+
+def cmd_help(args: list[str]):
+    """Show help."""
+    print(__doc__)
+
+
+def main():
+    load_env()
+
+    commands = {
+        'pull': cmd_pull,
+        'rm': cmd_rm,
+        'remove': cmd_rm,
+        'list': cmd_list,
+        'ls': cmd_list,
+        'sync': cmd_sync,
+        'run': cmd_run,
+        'help': cmd_help,
+        '--help': cmd_help,
+        '-h': cmd_help,
+    }
+
+    if len(sys.argv) < 2:
+        cmd_help([])
+        sys.exit(1)
+
+    cmd = sys.argv[1].lower()
+    args = sys.argv[2:]
+
+    if cmd in commands:
+        commands[cmd](args)
+    else:
+        print(f"Unknown command: {cmd}")
+        print("Run 'model help' for usage")
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
