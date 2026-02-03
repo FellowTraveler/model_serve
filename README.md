@@ -1,6 +1,6 @@
 # Model Serve
 
-A wrapper around [llama-swap](https://github.com/mostlygeek/llama-swap) that manages Ollama models on a single OpenAI-compatible API endpoint. Designed for users who want to serve multiple models simultaneously without duplicate storage, with access to advanced sampler settings like min-p and top-n-sigma (top-σ).
+A wrapper around [llama-swap](https://github.com/mostlygeek/llama-swap) that manages Ollama models on a single OpenAI-compatible API endpoint. Designed for users who want to serve multiple models simultaneously without duplicate storage, with access to advanced sampler settings like min-p and top-n-sigma (top-σ). Automatically symlinks Ollama models into LM Studio's models folder (or any directory you configure).
 
 Works on **macOS** (Intel and Apple Silicon) and **Linux**.
 
