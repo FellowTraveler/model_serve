@@ -127,6 +127,25 @@ models:
 
 Custom settings are preserved when regenerating `config.yaml`.
 
+### Auto-Sync with Cron (Optional)
+
+If you use `./model pull` and `./model rm`, you don't need cron - those commands auto-sync.
+
+However, if you sometimes use `ollama pull` directly, set up hourly auto-sync:
+
+```bash
+# Install cron job
+./setup_cron.sh
+
+# Verify it's installed
+crontab -l | grep sync_bridge
+
+# Remove if no longer needed
+crontab -l | grep -v sync_bridge | crontab -
+```
+
+The cron job runs `sync_bridge.sh` hourly, which syncs Ollama models and regenerates the config.
+
 ## How It Works
 
 1. **Ollama** downloads and manages model files
