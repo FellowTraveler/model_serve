@@ -1,0 +1,137 @@
+# llama-swap configuration
+# Multi-model LLM serving with on-demand loading
+
+listen: "0.0.0.0:${LLAMA_SWAP_PORT:-5847}"
+
+models:
+  # Small models (< 4B params)
+  gemma3-1b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/huihui_ai/huihui-ai-gemma3-abliterated-1b-fp16-GGUF/huihui-ai-gemma3-abliterated-1b-fp16.gguf
+      --ctx-size 8192
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  phi4-mini-3.8b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/huihui_ai/huihui-ai-phi4-mini-abliterated-3.8b-q8-0-GGUF/huihui-ai-phi4-mini-abliterated-3.8b-q8-0.gguf
+      --ctx-size 8192
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  llama3.2-3b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/huihui_ai/huihui-ai-llama3.2-abliterate-3b-instruct-q8-0-GGUF/huihui-ai-llama3.2-abliterate-3b-instruct-q8-0.gguf
+      --ctx-size 8192
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  # Medium models (7-14B params)
+  llama3-8b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/mannix/mannix-llama3-8b-ablitered-v3-q8-0-GGUF/mannix-llama3-8b-ablitered-v3-q8-0.gguf
+      --ctx-size 8192
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  granite3.2-8b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/huihui_ai/huihui-ai-granite3.2-abliterated-8b-instruct-q8-0-GGUF/huihui-ai-granite3.2-abliterated-8b-instruct-q8-0.gguf
+      --ctx-size 8192
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  phi4-14b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/huihui_ai/huihui-ai-phi4-abliterated-14b-q8-0-GGUF/huihui-ai-phi4-abliterated-14b-q8-0.gguf
+      --ctx-size 8192
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  qwen2.5-14b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/goekdenizguelmez/goekdenizguelmez-josiefied-qwen2.5-14b-abliterated-v4-latest-GGUF/goekdenizguelmez-josiefied-qwen2.5-14b-abliterated-v4-latest.gguf
+      --ctx-size 8192
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  llama3.3-16b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/Ryan512FL/Ryan512FL-llama3.3-GHAI-abliterated-16B-GGUF/Ryan512FL-llama3.3-GHAI-abliterated-16B.gguf
+      --ctx-size 8192
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  # Large models (24-32B params)
+  mistral-small-24b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/hf.co/hf.co-bartowski-mistralai-Mistral-Small-3.1-24B-Instruct-2503-GGUF-Q8-0-GGUF/hf.co-bartowski-mistralai-Mistral-Small-3.1-24B-Instruct-2503-GGUF-Q8-0.gguf
+      --ctx-size 8192
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  qwen2.5-32b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/huihui_ai/huihui-ai-qwen2.5-abliterate-32b-GGUF/huihui-ai-qwen2.5-abliterate-32b.gguf
+      --ctx-size 8192
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  qwq-32b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/huihui_ai/huihui-ai-qwq-abliterated-32b-Q6-K-GGUF/huihui-ai-qwq-abliterated-32b-Q6-K.gguf
+      --ctx-size 8192
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  deepseek-r1-32b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/huihui_ai/huihui-ai-deepseek-r1-abliterated-32b-GGUF/huihui-ai-deepseek-r1-abliterated-32b.gguf
+      --ctx-size 8192
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  # Extra large models (70B+ params)
+  llama3.3-70b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/Ryan512FL/Ryan512FL-llama3.3-GHAI-abliterated-70b-GGUF/Ryan512FL-llama3.3-GHAI-abliterated-70b.gguf
+      --ctx-size 4096
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  deepseek-r1-70b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/huihui_ai/huihui-ai-deepseek-r1-abliterated-70b-GGUF/huihui-ai-deepseek-r1-abliterated-70b.gguf
+      --ctx-size 4096
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  qwen2.5-72b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/huihui_ai/huihui-ai-qwen2.5-abliterate-72b-GGUF/huihui-ai-qwen2.5-abliterate-72b.gguf
+      --ctx-size 4096
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
+
+  r1-1776-70b:
+    cmd: >
+      llama-server --host 127.0.0.1 --port ${PORT}
+      --model /Users/au/.cache/lm-studio/models/unknown/r1-1776-70b-distill-llama-q4-K-M-GGUF/r1-1776-70b-distill-llama-q4-K-M.gguf
+      --ctx-size 4096
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: ${MODEL_TTL:-1800}
