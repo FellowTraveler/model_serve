@@ -22,14 +22,19 @@ Works on **macOS** (Intel and Apple Silicon) and **Linux**.
 - **On-demand loading** - Models load when first requested, not at startup
 - **Auto-unload** - Models unload after idle timeout (TTL) or memory pressure
 - **Ollama integration** - Pull/remove models with automatic config sync
+- **LM Studio integration** - (Optional) Ollama models are symlinked into LM Studio
 - **Advanced samplers** - Per-model min-p, top-n-sigma (top-σ), temperature, ctx_size
 
 ## Prerequisites
 
 - **macOS** (Intel or Apple Silicon) or **Linux**
-- [Ollama](https://ollama.ai) installed (required for model management)
-- [Homebrew](https://brew.sh) (macOS) or Go compiler (Linux, for building dependencies)
-- **Optional:** [LM Studio](https://lmstudio.ai) - if installed, models appear in both UIs
+- [Ollama](https://ollama.ai) - required for pulling and managing models
+- **Python 3** with pip - for the management scripts
+- [Homebrew](https://brew.sh) (macOS) - used by `install.sh` to install llama.cpp and Go
+- **Go compiler** - required to build lm-studio-ollama-bridge (installed via Homebrew if missing)
+- **Optional:** [LM Studio](https://lmstudio.ai) - if installed, Ollama models appear in both UIs
+
+**Note:** On Linux, you'll need to install Go and [llama.cpp](https://github.com/ggerganov/llama.cpp) manually before running `install.sh`. The llama-swap binary is downloaded directly from GitHub releases.
 
 ## Installation
 
