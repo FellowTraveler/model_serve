@@ -150,8 +150,45 @@ def reload_llama_swap() -> bool:
     return False
 
 
+def cleanup_broken_symlinks() -> int:
+    """Remove broken symlinks from LM Studio models directory."""
+    models_dir = os.environ.get('MODELS_DIR', '~/.cache/lm-studio/models')
+    models_dir = os.path.expanduser(models_dir)
+
+    if not os.path.exists(models_dir):
+        return 0
+
+    print(f"\n=== Cleaning up broken symlinks ===\n")
+
+    broken_count = 0
+    for root, dirs, files in os.walk(models_dir):
+        for name in files:
+            path = os.path.join(root, name)
+            if os.path.islink(path) and not os.path.exists(path):
+                os.remove(path)
+                broken_count += 1
+
+    # Remove empty directories
+    for root, dirs, files in os.walk(models_dir, topdown=False):
+        for name in dirs:
+            dir_path = os.path.join(root, name)
+            try:
+                if not os.listdir(dir_path):
+                    os.rmdir(dir_path)
+            except OSError:
+                pass
+
+    if broken_count > 0:
+        print(f"Removed {broken_count} broken symlinks")
+    else:
+        print("No broken symlinks found")
+
+    return broken_count
+
+
 def do_sync():
-    """Full sync: bridge + regenerate + reload."""
+    """Full sync: cleanup + bridge + regenerate + reload."""
+    cleanup_broken_symlinks()
     sync_bridge()
     regenerate_config()
     reload_llama_swap()
