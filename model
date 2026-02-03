@@ -160,21 +160,69 @@ def regenerate_config() -> bool:
 
 
 def reload_llama_swap() -> bool:
-    """Tell llama-swap to reload its config if running."""
+    """Restart llama-swap to pick up config changes."""
+    import signal
+
     port = os.environ.get('LLAMA_SWAP_PORT', '5847')
-    url = f"http://127.0.0.1:{port}/reload-config"
 
+    # Find llama-swap process
     try:
-        import requests
-        response = requests.post(url, timeout=5)
-        if response.ok:
-            print("llama-swap config reloaded")
-            return True
-    except:
-        pass
+        result = subprocess.run(
+            ['pgrep', '-f', 'llama-swap.*--config'],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            print("llama-swap not running (this is OK)")
+            return False
 
-    print("llama-swap not running or reload failed (this is OK)")
-    return False
+        pids = result.stdout.strip().split('\n')
+        if not pids or not pids[0]:
+            print("llama-swap not running (this is OK)")
+            return False
+
+        # Kill existing llama-swap
+        for pid in pids:
+            if pid:
+                os.kill(int(pid), signal.SIGTERM)
+        print("Stopped llama-swap")
+
+        # Wait for it to die
+        import time
+        time.sleep(1)
+
+        # Find llama-swap binary
+        llama_swap_bin = None
+        for path in ['/opt/homebrew/bin/llama-swap', '/usr/local/bin/llama-swap',
+                     str(SCRIPT_DIR / 'bin' / 'llama-swap')]:
+            if os.path.exists(path):
+                llama_swap_bin = path
+                break
+
+        if not llama_swap_bin:
+            # Try which
+            result = subprocess.run(['which', 'llama-swap'], capture_output=True, text=True)
+            if result.returncode == 0:
+                llama_swap_bin = result.stdout.strip()
+
+        if not llama_swap_bin:
+            print("Warning: llama-swap binary not found, cannot restart")
+            return False
+
+        # Restart llama-swap
+        config_path = SCRIPT_DIR / 'config.yaml'
+        subprocess.Popen(
+            [llama_swap_bin, '--config', str(config_path), '--listen', f'0.0.0.0:{port}'],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+        print(f"Restarted llama-swap on port {port}")
+        return True
+
+    except Exception as e:
+        print(f"Failed to reload llama-swap: {e}")
+        return False
 
 
 def cleanup_broken_symlinks() -> int:
