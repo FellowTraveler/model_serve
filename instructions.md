@@ -16,7 +16,7 @@ This minimizes startup time and memory pressure.
     5.    Is able to reuse the existing LM Studio models directory (~/.cache/lm-studio/models) as the canonical model storage location, so models downloaded via Ollama and symlinked into LM Studio are served directly without duplication.
     6.    Supports advanced sampling configurations, including settings like top-n-sigma, top-k, top-p, temperature, and related flags passed to the underlying inference server (llama-server) so we can fine-tune sampling behavior.
     7.    Works natively on macOS Apple Silicon (M3 Max) without container overhead — because native performance is crucial.
-    8.    Integrates the symlink bridge workflow (the script at /Users/au/src/lm-studio-ollama-bridge/lm-studio-ollama-bridge) on a periodic basis so that models downloaded/removed by Ollama remain available in the LM Studio directory and, by extension, to the model server.
+    8.    Integrates the symlink bridge workflow (the script at ~/src/lm-studio-ollama-bridge/lm-studio-ollama-bridge) on a periodic basis so that models downloaded/removed by Ollama remain available in the LM Studio directory and, by extension, to the model server.
     9.    Provides introspection and management endpoints (e.g., lists currently loaded models, allows manual unloads) so monitoring and auxiliary scripts can make unload decisions.
     10.    Minimizes unexpected or unnecessary unloading, meaning:
 
@@ -145,21 +145,21 @@ models:
   gpt-oss-20b:
     cmd: >
       llama-server --host 127.0.0.1 --port ${PORT}
-      --model /Users/au/.cache/lm-studio/models/hf.co/<PATH>/gpt-oss-20b-Derestricted-MXFP4.gguf
+      --model ~/.cache/lm-studio/models/hf.co/<PATH>/gpt-oss-20b-Derestricted-MXFP4.gguf
     proxy: "http://127.0.0.1:${PORT}"
     ttl: 1800   # idle unload after 30 min
 
   gemma3-27b:
     cmd: >
       llama-server --host 127.0.0.1 --port ${PORT}
-      --model /Users/au/.cache/lm-studio/models/<PATH>/gemma3-27b.gguf
+      --model ~/.cache/lm-studio/models/<PATH>/gemma3-27b.gguf
     proxy: "http://127.0.0.1:${PORT}"
     ttl: 1800
 
   qwen3-4b:
     cmd: >
       llama-server --host 127.0.0.1 --port ${PORT}
-      --model /Users/au/.cache/lm-studio/models/<PATH>/qwen3-4b-*.gguf
+      --model ~/.cache/lm-studio/models/<PATH>/qwen3-4b-*.gguf
     proxy: "http://127.0.0.1:${PORT}"
     ttl: 1800
 
@@ -209,14 +209,14 @@ Run it in the background alongside llama-swap.
 
 You already use:
 
-/Users/au/src/lm-studio-ollama-bridge/lm-studio-ollama-bridge
+~/src/lm-studio-ollama-bridge/lm-studio-ollama-bridge
 
 to sync Ollama models into the LM Studio model directory (symlinks). You can wrap that in a script that periodically refreshes before llama-swap checks for new models:
 
 Save as sync_and_reload.sh:
 
 #!/bin/bash
-/Users/au/src/lm-studio-ollama-bridge/lm-studio-ollama-bridge
+~/src/lm-studio-ollama-bridge/lm-studio-ollama-bridge
 # Force llama-swap to reload config
 curl -X POST http://127.0.0.1:5005/reload-config
 
