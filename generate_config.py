@@ -28,10 +28,10 @@ def get_config():
     }
 
 
-def find_gguf_files(models_dir: str) -> list[tuple[str, str]]:
+def find_gguf_files(models_dir: str) -> list[tuple[str, str, str]]:
     """
     Find all GGUF files in the models directory.
-    Returns list of (model_name, file_path) tuples.
+    Returns list of (model_name, symlink_path, resolved_path) tuples.
     """
     models = []
     models_path = Path(models_dir)
@@ -47,7 +47,10 @@ def find_gguf_files(models_dir: str) -> list[tuple[str, str]]:
             for gguf_file in sorted(model_dir.glob('*.gguf')):
                 # Create clean model name
                 model_id = create_model_name(model_dir.name, gguf_file.stem)
-                models.append((model_id, str(gguf_file.resolve())))
+                # Store symlink path (for cmd) and resolved path (for comment)
+                symlink_path = str(gguf_file.absolute())
+                resolved_path = str(gguf_file.resolve())
+                models.append((model_id, symlink_path, resolved_path))
 
     # Also scan other directories (non-ollama) for any GGUF files
     for publisher_dir in sorted(models_path.iterdir()):
@@ -67,7 +70,9 @@ def find_gguf_files(models_dir: str) -> list[tuple[str, str]]:
 
                 # Avoid duplicates
                 if not any(m[0] == model_id for m in models):
-                    models.append((model_id, str(gguf_file.resolve())))
+                    symlink_path = str(gguf_file.absolute())
+                    resolved_path = str(gguf_file.resolve())
+                    models.append((model_id, symlink_path, resolved_path))
 
     return models
 
@@ -148,7 +153,7 @@ def load_custom_models(script_dir: Path) -> dict:
         return {}
 
 
-def generate_config(models: list[tuple[str, str]], config: dict, custom_models: dict) -> dict:
+def generate_config(models: list[tuple[str, str, str]], config: dict, custom_models: dict) -> dict:
     """Generate llama-swap configuration dictionary."""
 
     llama_swap_config = {
@@ -158,27 +163,29 @@ def generate_config(models: list[tuple[str, str]], config: dict, custom_models: 
 
     prefix = config.get('model_prefix', '')
 
-    for model_id, model_path in models:
+    for model_id, symlink_path, resolved_path in models:
         # Check for custom ctx_size first, otherwise estimate
         custom = custom_models.get(model_id)
         if custom and 'ctx_size' in custom:
             ctx_size = custom['ctx_size']
         else:
-            ctx_size = estimate_ctx_size(model_path, config['default_ctx_size'])
+            ctx_size = estimate_ctx_size(symlink_path, config['default_ctx_size'])
 
         # Add prefix to distinguish from Ollama models
         prefixed_id = f"{prefix}{model_id}" if prefix else model_id
 
-        # Default command
+        # Default command (uses symlink path so it auto-updates when Ollama updates model)
         # --parallel: Number of slots (1 = single-user, saves memory)
         # --metrics: Enables /metrics endpoint for monitoring
         parallel = config['default_parallel']
-        cmd = f"llama-server --host 127.0.0.1 --port ${{PORT}} --model {model_path} --ctx-size {ctx_size} --parallel {parallel} --metrics"
+        cmd = f"llama-server --host 127.0.0.1 --port ${{PORT}} --model {symlink_path} --ctx-size {ctx_size} --parallel {parallel} --metrics"
 
+        # Description shows actual blob path for debugging
         model_config = {
             'cmd': cmd,
             'proxy': "http://127.0.0.1:${PORT}",
             'ttl': config['model_ttl'],
+            'description': f"blob: {resolved_path}",
         }
 
         # Check for custom overrides (use original model_id for lookup)
@@ -253,7 +260,7 @@ def main():
 
     # Show sample models
     print("\nSample models:")
-    for model_id, path in models[:15]:
+    for model_id, symlink_path, resolved_path in models[:15]:
         custom_marker = " [custom]" if model_id in custom_models else ""
         print(f"  {model_id}{custom_marker}")
     if len(models) > 15:
