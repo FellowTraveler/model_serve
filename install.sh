@@ -6,7 +6,18 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Detect platform
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    PLATFORM="macos"
+elif [[ "$OSTYPE" == "linux"* ]]; then
+    PLATFORM="linux"
+else
+    echo "Unsupported platform: $OSTYPE"
+    exit 1
+fi
+
 echo "=== Installing Model Serve Dependencies ==="
+echo "Platform: $PLATFORM"
 echo ""
 
 # Initialize submodules
@@ -24,8 +35,14 @@ mkdir -p "$SCRIPT_DIR/bin"
 if [ ! -x "$BRIDGE_BIN" ]; then
     echo "Building lm-studio-ollama-bridge..."
     if ! command -v go &> /dev/null; then
-        echo "Go not found. Installing via Homebrew..."
-        brew install go
+        if [ "$PLATFORM" = "macos" ]; then
+            echo "Go not found. Installing via Homebrew..."
+            brew install go
+        else
+            echo "Error: Go is required but not installed."
+            echo "Install Go from: https://go.dev/dl/"
+            exit 1
+        fi
     fi
     cd "$BRIDGE_SRC"
     go build -o "$BRIDGE_BIN" ./cmd/ollama-sync
@@ -36,10 +53,17 @@ else
 fi
 echo ""
 
-# Install llama.cpp via Homebrew
+# Install llama.cpp
 if ! command -v llama-server &> /dev/null; then
-    echo "Installing llama.cpp..."
-    brew install llama.cpp
+    if [ "$PLATFORM" = "macos" ]; then
+        echo "Installing llama.cpp via Homebrew..."
+        brew install llama.cpp
+    else
+        echo "Error: llama-server (llama.cpp) is required but not installed."
+        echo "Build from source: https://github.com/ggerganov/llama.cpp"
+        echo "Or install via your package manager if available."
+        exit 1
+    fi
 else
     echo "✓ llama.cpp already installed"
 fi
@@ -59,12 +83,20 @@ if ! command -v llama-swap &> /dev/null; then
 
     echo "Latest version: v$LLAMA_SWAP_VERSION"
 
-    # Determine architecture
+    # Determine OS and architecture
     ARCH=$(uname -m)
-    if [ "$ARCH" = "arm64" ]; then
-        TARBALL="llama-swap_${LLAMA_SWAP_VERSION}_darwin_arm64.tar.gz"
+    if [ "$PLATFORM" = "macos" ]; then
+        if [ "$ARCH" = "arm64" ]; then
+            TARBALL="llama-swap_${LLAMA_SWAP_VERSION}_darwin_arm64.tar.gz"
+        else
+            TARBALL="llama-swap_${LLAMA_SWAP_VERSION}_darwin_amd64.tar.gz"
+        fi
     else
-        TARBALL="llama-swap_${LLAMA_SWAP_VERSION}_darwin_amd64.tar.gz"
+        if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+            TARBALL="llama-swap_${LLAMA_SWAP_VERSION}_linux_arm64.tar.gz"
+        else
+            TARBALL="llama-swap_${LLAMA_SWAP_VERSION}_linux_amd64.tar.gz"
+        fi
     fi
 
     # Download and extract
