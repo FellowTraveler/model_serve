@@ -69,8 +69,24 @@ The server runs on port 5847 by default (configurable in `.env`).
 # Manual sync (after direct ollama commands)
 ./model sync
 
+# Show running models with resource usage
+./model stats
+
 # Run a model interactively
 ./model run gemma3:12b
+```
+
+The `stats` command shows all loaded models with context size, slots, state, and system memory:
+```
+======================================================================
+MODEL                                              CTX  SLOTS    STATE
+======================================================================
+ls/gemma3:27.4b-q8_0                            32,768      4    ready
+ls/codestral:22.2b-q8_0                         32,768      4    ready
+======================================================================
+TOTAL                                           65,536      8
+
+System Memory: 65.2% used (83.5GB / 128.0GB)
 ```
 
 ### API Endpoints
@@ -79,18 +95,16 @@ The server runs on port 5847 by default (configurable in `.env`).
 # Chat completion (OpenAI-compatible)
 curl http://127.0.0.1:5847/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "gemma3:12.2b-q8_0", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "ls/gemma3:12.2b-q8_0", "messages": [{"role": "user", "content": "Hello"}]}'
 
 # List available models
 curl http://127.0.0.1:5847/v1/models
 
-# List currently loaded models
+# List currently loaded models (with full details)
 curl http://127.0.0.1:5847/running
 
 # Unload a specific model
-curl -X POST http://127.0.0.1:5847/models/unload \
-  -H "Content-Type: application/json" \
-  -d '{"model": "gemma3:12.2b-q8_0"}'
+curl -X POST "http://127.0.0.1:5847/unload?model=ls/gemma3:12.2b-q8_0"
 ```
 
 ### Stop the Server
@@ -107,10 +121,13 @@ curl -X POST http://127.0.0.1:5847/models/unload \
 |----------|---------|-------------|
 | `LLAMA_SWAP_PORT` | 5847 | API server port |
 | `MODEL_TTL` | 1800 | Idle timeout in seconds (30 min) |
-| `MEMORY_PRESSURE_THRESHOLD` | 75 | Memory % to trigger auto-unload |
+| `MEMORY_PRESSURE_THRESHOLD` | 75 | Memory % to trigger auto-unload (increase to 85+ for 128GB systems) |
+| `PRESSURE_CHECK_INTERVAL` | 30 | Seconds between memory pressure checks |
 | `MODELS_DIR` | ~/.cache/lm-studio/models | Where models are stored |
 | `BRIDGE_SCRIPT` | (bundled) | Path to lm-studio-ollama-bridge (uses submodule by default) |
 | `MODEL_PREFIX` | `ls/` | Prefix for model names to distinguish from Ollama in Open WebUI |
+| `DEFAULT_CTX_SIZE` | 8192 | Default context size for models without custom settings |
+| `BRIDGE_SYNC_INTERVAL` | 3600 | Seconds between automatic syncs (when using start.sh) |
 
 ### Model Naming
 
@@ -120,26 +137,44 @@ Models are prefixed with `ls/` by default so you can distinguish them from Ollam
 
 Change the prefix in `.env` by setting `MODEL_PREFIX` (or set to empty to disable).
 
-### Custom Sampler Settings (Optional)
+### Custom Model Settings (Optional)
 
-Custom sampler settings are **optional** - the defaults work fine for most models. Add them later if you want to fine-tune specific models (e.g., lower temperature for coding).
+Custom settings are **optional** - the defaults work fine for most models. Add them later if you want to fine-tune specific models.
 
-Edit `custom_models.yaml` to configure per-model sampling:
+Edit `custom_models.yaml` to configure per-model settings:
 
 ```yaml
 models:
   # Use model name WITHOUT the ls/ prefix
+  # General model with adaptive sampling
   gemma3:27.4b-q8_0:
-    sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+    ctx_size: 32768  # Override default context size
 
+  # Coding model with lower temperature
   codestral:22.2b-q8_0:
-    sampler_args: "--top-p 0.9 --temp 0.2"
-    ttl: 3600  # Keep loaded longer
+    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.4"
+    ctx_size: 32768
+    ttl: 3600  # Keep loaded longer for coding sessions
+
+  # Large context model
+  gpt-oss-120b-derestricted-gguf:117b-unknown:
+    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+    ctx_size: 65536  # 64k context (model supports 128k)
 ```
 
-After editing, run `./model sync` to regenerate config. The server auto-reloads.
+Available settings:
+- `sampler_args`: Additional args appended to llama-server command
+- `ctx_size`: Context size (overrides auto-estimated value based on model size)
+- `ttl`: Custom idle timeout in seconds
+- `cmd`: Full command override (use `${MODEL_PATH}` and `${PORT}` placeholders)
 
-Custom settings are preserved when regenerating `config.yaml`.
+**Sampler notes:**
+- `--top-nsigma 1.5`: Adaptive sampling based on logit std deviation (works well with higher temps)
+- `--min-p 0.05`: Filters tokens below 5% of top token probability
+- `--temp`: Temperature (1.0-1.2 for general, 0.7 for Mistral, 0.4 for coding)
+
+After editing, run `./model sync` to regenerate config. If llama-swap is running and the config changed, it will automatically restart to pick up the new settings.
 
 ### Auto-Sync with Cron (Optional)
 
@@ -164,26 +199,28 @@ The cron job runs `sync_bridge.sh` hourly, which syncs Ollama models and regener
 
 1. **Ollama** downloads and manages model files
 2. **lm-studio-ollama-bridge** (bundled submodule) creates symlinks in LM Studio's model directory
-3. **generate_config.py** scans for models and creates `config.yaml`
+3. **generate_config.py** scans for models, merges custom settings, and creates `config.yaml`
 4. **llama-swap** routes requests to the right model, spawning llama-server instances on demand
-5. **pressure_unloader.py** monitors memory and unloads models when needed
+5. **pressure_unloader.py** monitors memory and unloads idle models when pressure is high
+6. **sync_loop.sh** periodically syncs models and restarts llama-swap if config changed
 
 ## File Structure
 
 ```
 model_serve/
-├── model                      # Main CLI (pull, rm, list, sync, run)
+├── model                      # Main CLI (pull, rm, list, sync, stats, run)
 ├── start.sh                   # Start the server stack
 ├── stop.sh                    # Stop all services
 ├── status.sh                  # Check running status
 ├── install.sh                 # Install dependencies
-├── setup_cron.sh              # Set up hourly auto-sync
+├── setup_cron.sh              # Set up hourly auto-sync (standalone cron)
 ├── generate_config.py         # Discover models → config.yaml
-├── sync_bridge.sh             # Bridge + regenerate + reload
+├── sync_bridge.sh             # Bridge + regenerate (for cron)
+├── sync_loop.sh               # Periodic sync loop (used by start.sh)
 ├── pressure_unloader.py       # Memory pressure monitor
 ├── lm-studio-ollama-bridge/   # Submodule: Ollama-LM Studio sync tool
-├── config.yaml                # Auto-generated llama-swap config
-├── custom_models.yaml         # Your custom sampler settings
+├── config.yaml                # Auto-generated llama-swap config (git-ignored)
+├── custom_models.yaml         # Your custom model settings
 ├── .env.example               # Environment template
 └── .env                       # Your local config (git-ignored)
 ```
@@ -213,6 +250,20 @@ ls -la ~/.cache/lm-studio/models/ollama/<model-name>/
 **Bridge not built:**
 ```bash
 ./install.sh
+```
+
+**Models keep getting unloaded (memory pressure):**
+
+If you have plenty of RAM but models keep unloading, raise the memory threshold in `.env`:
+```bash
+MEMORY_PRESSURE_THRESHOLD=85  # or higher for 128GB+ systems
+```
+Then restart the server.
+
+**Check what's running:**
+```bash
+./model stats    # Show loaded models with resource usage
+./status.sh      # Check all services
 ```
 
 ## License
