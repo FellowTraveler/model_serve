@@ -70,11 +70,12 @@ models:
      ctx_size: 32768
 
   # --- GLM models (supports 128k context) ---
+  # GLM-4.7 is a thinking model; --reasoning-budget 0 disables thinking
    glm-4.7-flash-gguf:29.9b-q8_k_xl:
-     sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+     sampler_args: "--reasoning-budget 0 --top-nsigma 1.5 --min-p 0.05 --temp 1.2"
      ctx_size: 65536
    glm-4.7-flash-derestricted-gguf:29.9b-q8_0:
-     sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+     sampler_args: "--reasoning-budget 0 --top-nsigma 1.5 --min-p 0.05 --temp 1.2"
      ctx_size: 65536
 
   # --- Qwen3 models (supports 32k context) ---

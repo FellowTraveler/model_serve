@@ -234,6 +234,8 @@ Available settings:
 | `--repeat-penalty` | 1.0 | Penalize repeated tokens (1.0 = disabled) |
 | `--presence-penalty` | 0.0 | Presence penalty for repetition (0.0 = disabled) |
 | `--frequency-penalty` | 0.0 | Frequency penalty for repetition (0.0 = disabled) |
+| `--reasoning-budget` | -1 | For thinking models: -1 = unlimited, 0 = disable thinking |
+| `--reasoning-format` | none | For thinking models: `deepseek` extracts thoughts to `reasoning_content` |
 
 **Recommended combinations:**
 - **Balanced**: `--top-nsigma 1.5 --min-p 0.05 --temp 1.0` (top-p/top-k disabled)
