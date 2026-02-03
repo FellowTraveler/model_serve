@@ -34,7 +34,7 @@ Works on **macOS** (Intel and Apple Silicon) and **Linux**.
 - **Go compiler** - required to build lm-studio-ollama-bridge (installed via Homebrew if missing)
 - **Optional:** [LM Studio](https://lmstudio.ai) - if installed, Ollama models appear in both UIs
 
-**Note:** On Linux, you'll need to install Go and [llama.cpp](https://github.com/ggerganov/llama.cpp) manually before running `install.sh`. The llama-swap binary is downloaded directly from GitHub releases.
+**Note:** On Linux, install Go and [llama.cpp](https://github.com/ggerganov/llama.cpp) before running `install.sh`. The script will download the correct llama-swap binary automatically and build the bridge from source.
 
 ## Installation
 
