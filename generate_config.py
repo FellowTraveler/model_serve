@@ -23,6 +23,7 @@ def get_config():
         'llama_swap_port': os.environ.get('LLAMA_SWAP_PORT', '5847'),
         'model_ttl': int(os.environ.get('MODEL_TTL', '1800')),
         'default_ctx_size': int(os.environ.get('DEFAULT_CTX_SIZE', '8192')),
+        'model_prefix': os.environ.get('MODEL_PREFIX', 'ls/'),  # Prefix to distinguish from Ollama
     }
 
 
@@ -154,8 +155,13 @@ def generate_config(models: list[tuple[str, str]], config: dict, custom_models: 
         'models': {}
     }
 
+    prefix = config.get('model_prefix', '')
+
     for model_id, model_path in models:
         ctx_size = estimate_ctx_size(model_path, config['default_ctx_size'])
+
+        # Add prefix to distinguish from Ollama models
+        prefixed_id = f"{prefix}{model_id}" if prefix else model_id
 
         # Default command
         cmd = f"llama-server --host 127.0.0.1 --port ${{PORT}} --model {model_path} --ctx-size {ctx_size}"
@@ -166,7 +172,7 @@ def generate_config(models: list[tuple[str, str]], config: dict, custom_models: 
             'ttl': config['model_ttl'],
         }
 
-        # Check for custom overrides
+        # Check for custom overrides (use original model_id for lookup)
         if model_id in custom_models:
             custom = custom_models[model_id]
 
@@ -183,7 +189,7 @@ def generate_config(models: list[tuple[str, str]], config: dict, custom_models: 
                 if key in custom:
                     model_config[key] = custom[key]
 
-        llama_swap_config['models'][model_id] = model_config
+        llama_swap_config['models'][prefixed_id] = model_config
 
     # Add any custom-only models (not auto-discovered)
     for model_id, custom in custom_models.items():
