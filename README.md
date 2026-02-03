@@ -43,7 +43,7 @@ cd model_serve
 # Generate config from existing Ollama models
 ./model sync
 
-# (Optional) Set up hourly auto-sync via cron
+# (Optional) Set up cron to keep server running
 ./setup_cron.sh
 ```
 
@@ -198,24 +198,22 @@ Available settings:
 
 After editing, run `./model sync` to regenerate config. If llama-swap is running and the config changed, it will automatically restart to pick up the new settings.
 
-### Auto-Sync with Cron (Optional)
+### Keep-Alive with Cron (Optional)
 
-If you use `./model pull` and `./model rm`, you don't need cron - those commands auto-sync.
-
-However, if you sometimes use `ollama pull` directly, set up hourly auto-sync:
+If you want the server to auto-start and stay running (e.g., after reboot), set up a cron job:
 
 ```bash
-# Install cron job
+# Install cron job (checks/starts server hourly)
 ./setup_cron.sh
 
 # Verify it's installed
-crontab -l | grep sync_bridge
+crontab -l | grep 'model start'
 
 # Remove if no longer needed
-crontab -l | grep -v sync_bridge | crontab -
+crontab -l | grep -v 'model start' | crontab -
 ```
 
-The cron job runs `sync_bridge.sh` hourly, which syncs Ollama models and regenerates the config.
+The cron job runs `./model start` hourly. If the server is already running, it exits immediately. If not, it starts the full stack (llama-swap, sync loop, pressure monitor).
 
 ## How It Works
 
@@ -235,9 +233,9 @@ model_serve/
 ├── stop.sh                    # Stop all services
 ├── status.sh                  # Check running status
 ├── install.sh                 # Install dependencies
-├── setup_cron.sh              # Set up hourly auto-sync (standalone cron)
+├── setup_cron.sh              # Set up cron keep-alive (auto-start if not running)
 ├── generate_config.py         # Discover models → config.yaml
-├── sync_bridge.sh             # Bridge + regenerate (for cron)
+├── sync_bridge.sh             # Sync wrapper with PATH setup (used by sync_loop.sh)
 ├── sync_loop.sh               # Periodic sync loop (used by start.sh)
 ├── pressure_unloader.py       # Memory pressure monitor
 ├── lm-studio-ollama-bridge/   # Submodule: Ollama-LM Studio sync tool
