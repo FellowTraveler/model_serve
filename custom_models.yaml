@@ -40,8 +40,15 @@ models:
      sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
      ctx_size: 32768
    gemma3:12.2b-q8_0:
-     sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+     sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.0"
      ctx_size: 32768
+
+  # Alias: same model, tuned for creative/diverse outputs (also demos smaller ctx)
+   gemma3-creative:
+     base_model: gemma3:12.2b-q8_0
+     sampler_args: "--top-nsigma 2.0 --min-p 0.02 --temp 1.4"
+     ctx_size: 8192
+
    gemma3:4.3b-f16:
      sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
      ctx_size: 32768

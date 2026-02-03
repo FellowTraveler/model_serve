@@ -162,7 +162,12 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
     }
 
     prefix = config.get('model_prefix', '')
+    parallel = config['default_parallel']
 
+    # Build lookup of model paths for base_model references
+    model_paths = {model_id: (symlink_path, resolved_path) for model_id, symlink_path, resolved_path in models}
+
+    # Process auto-discovered models
     for model_id, symlink_path, resolved_path in models:
         # Check for custom ctx_size first, otherwise estimate
         custom = custom_models.get(model_id)
@@ -177,7 +182,6 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
         # Default command (uses symlink path so it auto-updates when Ollama updates model)
         # --parallel: Number of slots (1 = single-user, saves memory)
         # --metrics: Enables /metrics endpoint for monitoring
-        parallel = config['default_parallel']
         cmd = f"llama-server --host 127.0.0.1 --port ${{PORT}} --model {symlink_path} --ctx-size {ctx_size} --parallel {parallel} --metrics"
 
         # Description shows actual blob path for debugging
@@ -202,7 +206,7 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
 
                 # Allow full cmd override
                 if 'cmd' in custom:
-                    model_config['cmd'] = custom['cmd'].replace('${MODEL_PATH}', model_path)
+                    model_config['cmd'] = custom['cmd'].replace('${MODEL_PATH}', symlink_path)
 
                 # Allow other overrides (ttl, etc)
                 for key in ['ttl', 'proxy']:
@@ -211,17 +215,46 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
 
         llama_swap_config['models'][prefixed_id] = model_config
 
-    # Add any custom-only models (not auto-discovered)
+    # Process custom-only models (not auto-discovered)
     for model_id, custom in custom_models.items():
         if custom is None:
             continue
-        if model_id not in llama_swap_config['models']:
-            if 'cmd' in custom:
-                llama_swap_config['models'][model_id] = {
-                    'cmd': custom['cmd'],
-                    'proxy': custom.get('proxy', "http://127.0.0.1:${PORT}"),
-                    'ttl': custom.get('ttl', config['model_ttl']),
-                }
+
+        prefixed_id = f"{prefix}{model_id}" if prefix else model_id
+
+        # Skip if already added (was auto-discovered)
+        if prefixed_id in llama_swap_config['models']:
+            continue
+
+        # Handle base_model aliases (same model file, different settings)
+        if 'base_model' in custom:
+            base_model = custom['base_model']
+            if base_model not in model_paths:
+                print(f"Warning: base_model '{base_model}' not found for alias '{model_id}'")
+                continue
+
+            symlink_path, resolved_path = model_paths[base_model]
+            ctx_size = custom.get('ctx_size', estimate_ctx_size(symlink_path, config['default_ctx_size']))
+
+            cmd = f"llama-server --host 127.0.0.1 --port ${{PORT}} --model {symlink_path} --ctx-size {ctx_size} --parallel {parallel} --metrics"
+
+            if 'sampler_args' in custom:
+                cmd = f"{cmd} {custom['sampler_args']}"
+
+            llama_swap_config['models'][prefixed_id] = {
+                'cmd': cmd,
+                'proxy': custom.get('proxy', "http://127.0.0.1:${PORT}"),
+                'ttl': custom.get('ttl', config['model_ttl']),
+                'description': f"alias of {base_model} | blob: {resolved_path}",
+            }
+
+        # Handle full cmd override (completely custom entry)
+        elif 'cmd' in custom:
+            llama_swap_config['models'][prefixed_id] = {
+                'cmd': custom['cmd'],
+                'proxy': custom.get('proxy', "http://127.0.0.1:${PORT}"),
+                'ttl': custom.get('ttl', config['model_ttl']),
+            }
 
     return llama_swap_config
 

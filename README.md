@@ -87,13 +87,19 @@ llama-swap listens on port 5847 by default (configurable via `LLAMA_SWAP_PORT` i
 # Remove a model
 ./model rm gemma3:27b
 
-# List all models
+# List Ollama models (with optional filter)
 ./model list
-
-# List models matching a filter (case-insensitive)
 ./model list qwen
-./model list derestricted
-./model list 70b
+
+# List llama-swap model names from config
+./model list --config
+./model list --config gemma
+
+# Show Ollama → llama-swap name mapping
+./model names gemma
+
+# Show full config for a model (all settings)
+./model show gemma3:12
 
 # Manual sync (after direct ollama commands)
 ./model sync
@@ -104,6 +110,8 @@ llama-swap listens on port 5847 by default (configurable via `LLAMA_SWAP_PORT` i
 # Run a model interactively
 ./model run gemma3:12b
 ```
+
+**Finding model names:** Ollama model names (e.g., `gemma3:1b-it-qat`) don't always match llama-swap names (e.g., `gemma3:999.89m-q4_0`) because llama-swap uses the actual GGUF file metadata. Use `./model names` or `./model list --config` to find the correct names for API requests and `custom_models.yaml`.
 
 The `stats` command shows all loaded models with context size, slots, state, and system memory:
 ```
@@ -187,34 +195,37 @@ Edit `custom_models.yaml` to configure per-model settings:
 
 ```yaml
 models:
-  # Use model name WITHOUT the ls/ prefix
-  # General model with adaptive sampling
-  gemma3:27.4b-q8_0:
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
-    ctx_size: 32768  # Override default context size
+  # Use model name WITHOUT the ls/ prefix (use ./model names to find names)
+  # Standard settings
+  gemma3:12.2b-q8_0:
+    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.0"
+    ctx_size: 32768
+
+  # Alias: same model file, different settings (appears as ls/gemma3-creative)
+  # Useful for having "creative" vs "precise" variants of the same model
+  gemma3-creative:
+    base_model: gemma3:12.2b-q8_0
+    sampler_args: "--top-nsigma 2.0 --min-p 0.02 --temp 1.4"
+    ctx_size: 8192  # Smaller context = less memory
 
   # Coding model with lower temperature
   codestral:22.2b-q8_0:
     sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.4"
     ctx_size: 32768
     ttl: 3600  # Keep loaded longer for coding sessions
-
-  # Large context model
-  gpt-oss-120b-derestricted-gguf:117b-unknown:
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
-    ctx_size: 65536  # 64k context (model supports 128k)
 ```
 
 Available settings:
 - `sampler_args`: Additional args appended to llama-server command
 - `ctx_size`: Context size (overrides auto-estimated value based on model size)
 - `ttl`: Custom idle timeout in seconds
+- `base_model`: Create an alias pointing to another model's file (same GGUF, different settings)
 - `cmd`: Full command override (use `${MODEL_PATH}` and `${PORT}` placeholders)
 
 **Sampler notes:**
-- `--top-nsigma 1.5`: Adaptive sampling based on logit std deviation (works well with higher temps)
-- `--min-p 0.05`: Filters tokens below 5% of top token probability
-- `--temp`: Temperature (1.0-1.2 for general, 0.7 for Mistral, 0.4 for coding)
+- `--top-nsigma`: Adaptive sampling based on logit std deviation (1.5 balanced, 2.0 creative)
+- `--min-p`: Filters tokens below X% of top token probability (0.05 balanced, 0.02 creative)
+- `--temp`: Temperature (1.0 balanced, 1.4 creative, 0.7 Mistral, 0.4 coding)
 
 After editing, run `./model sync` to regenerate config. If llama-swap is running and the config changed, it will automatically restart to pick up the new settings.
 

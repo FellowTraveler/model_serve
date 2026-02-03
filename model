@@ -11,7 +11,10 @@ Usage:
     ./model stats                  Show loaded models with resource usage
     ./model pull <model-name>      Pull a model and sync
     ./model rm <model-name>        Remove a model and sync
-    ./model list [filter]          List models (optional case-insensitive filter)
+    ./model list [filter]          List Ollama models (optional filter)
+    ./model list --config [filter] List llama-swap model names from config
+    ./model names [filter]         Show Ollama → llama-swap name mapping
+    ./model show <filter>          Show full config for matching models
     ./model sync                   Just sync and regenerate config
     ./model run <model-name>       Run a model interactively (passthrough to ollama)
 
@@ -19,7 +22,10 @@ Examples:
     ./model start                  # Start server, logs to model_serve.log
     ./model stats                  # See what's loaded and memory usage
     ./model pull gemma3:27b        # Pull and auto-sync
-    ./model list derestricted      # Filter models by name
+    ./model list derestricted      # Filter Ollama models by name
+    ./model list --config gemma    # Show llama-swap names matching 'gemma'
+    ./model names qwen             # Show name mapping for qwen models
+    ./model show gemma3:12         # Show full config for matching models
 """
 
 import os
@@ -325,10 +331,206 @@ def cmd_rm(args: list[str]):
     print(f"\n=== Done! {model_name} removed ===")
 
 
+def load_config() -> dict:
+    """Load config.yaml and return as dict."""
+    import yaml
+    config_path = SCRIPT_DIR / 'config.yaml'
+    if not config_path.exists():
+        return {}
+    with open(config_path) as f:
+        return yaml.safe_load(f) or {}
+
+
 def cmd_list(args: list[str]):
     """Handle list command with optional filter."""
+    # Check for --config flag
+    if args and args[0] == '--config':
+        filter_term = args[1] if len(args) > 1 else None
+        cmd_list_config(filter_term)
+        return
+
     filter_term = args[0] if args else None
     ollama_list(filter_term)
+
+
+def cmd_list_config(filter_term: str = None):
+    """List model names from config.yaml (llama-swap names)."""
+    config = load_config()
+    models = config.get('models', {})
+
+    if not models:
+        print("No models in config.yaml. Run './model sync' first.")
+        return
+
+    print(f"{'MODEL NAME':<60} {'CTX':>8}")
+    print("=" * 70)
+
+    count = 0
+    for model_name, model_config in sorted(models.items()):
+        if filter_term and filter_term.lower() not in model_name.lower():
+            continue
+
+        # Extract ctx_size from cmd
+        cmd = model_config.get('cmd', '')
+        ctx_size = '-'
+        if '--ctx-size' in cmd:
+            try:
+                parts = cmd.split('--ctx-size')[1].split()
+                ctx_size = f"{int(parts[0]):,}"
+            except:
+                pass
+
+        print(f"{model_name:<60} {ctx_size:>8}")
+        count += 1
+
+    print(f"\n({count} models" + (f" matching '{filter_term}'" if filter_term else "") + ")")
+
+
+def cmd_names(args: list[str]):
+    """Show mapping between Ollama names and llama-swap names."""
+    config = load_config()
+    models = config.get('models', {})
+    filter_term = args[0] if args else None
+
+    if not models:
+        print("No models in config.yaml. Run './model sync' first.")
+        return
+
+    # Get Ollama model list for comparison
+    result = subprocess.run(['ollama', 'list'], capture_output=True, text=True, check=False)
+    ollama_lines = result.stdout.strip().split('\n')[1:] if result.returncode == 0 else []
+
+    # Build mapping: extract model name from Ollama output
+    ollama_names = {}
+    for line in ollama_lines:
+        if line.strip():
+            parts = line.split()
+            if parts:
+                ollama_names[parts[0]] = line
+
+    print(f"{'OLLAMA NAME':<45} {'LLAMA-SWAP NAME':<35}")
+    print("=" * 80)
+
+    count = 0
+    prefix = os.environ.get('MODEL_PREFIX', 'ls/')
+
+    # For each model in config, try to find corresponding Ollama name
+    for llama_swap_name in sorted(models.keys()):
+        # Remove prefix to get base name
+        if prefix and llama_swap_name.startswith(prefix):
+            base_name = llama_swap_name[len(prefix):]
+        else:
+            base_name = llama_swap_name
+
+        # Check for alias (from description)
+        description = models[llama_swap_name].get('description', '')
+        if description.startswith('alias of '):
+            alias_info = f"(alias of {description.split('|')[0].replace('alias of ', '').strip()})"
+        else:
+            alias_info = ''
+
+        # Apply filter
+        if filter_term:
+            filter_lower = filter_term.lower()
+            if filter_lower not in base_name.lower() and filter_lower not in llama_swap_name.lower():
+                continue
+
+        # Find matching Ollama name (fuzzy match on base_name components)
+        ollama_match = '-'
+        for ollama_name in ollama_names:
+            # Check if the base name matches part of the Ollama name
+            ollama_lower = ollama_name.lower()
+            base_lower = base_name.lower()
+            # Match if base contains key parts of ollama name or vice versa
+            base_parts = base_lower.replace(':', '/').split('/')
+            ollama_parts = ollama_lower.replace(':', '/').split('/')
+            if any(p in ollama_lower for p in base_parts if len(p) > 3):
+                ollama_match = ollama_name
+                break
+
+        display_ollama = ollama_match if ollama_match != '-' else '(not in ollama)'
+        if alias_info:
+            display_ollama = alias_info
+
+        print(f"{display_ollama:<45} {llama_swap_name:<35}")
+        count += 1
+
+    print(f"\n({count} models" + (f" matching '{filter_term}'" if filter_term else "") + ")")
+    print("\nTip: Use the llama-swap name (right column) in API requests and custom_models.yaml")
+
+
+def cmd_show(args: list[str]):
+    """Show full configuration for matching models."""
+    if not args:
+        print("Usage: model show <filter>")
+        print("Example: model show gemma3:12")
+        sys.exit(1)
+
+    filter_term = args[0].lower()
+    config = load_config()
+    models = config.get('models', {})
+
+    if not models:
+        print("No models in config.yaml. Run './model sync' first.")
+        return
+
+    matches = []
+    for model_name, model_config in models.items():
+        if filter_term in model_name.lower():
+            matches.append((model_name, model_config))
+
+    if not matches:
+        print(f"No models matching '{args[0]}'")
+        return
+
+    for model_name, model_config in sorted(matches):
+        print(f"\n{'='*70}")
+        print(f"MODEL: {model_name}")
+        print(f"{'='*70}")
+
+        cmd = model_config.get('cmd', '')
+        proxy = model_config.get('proxy', '')
+        ttl = model_config.get('ttl', '')
+        description = model_config.get('description', '')
+
+        # Parse settings from cmd
+        print(f"\nSettings:")
+
+        # ctx_size
+        if '--ctx-size' in cmd:
+            try:
+                ctx = cmd.split('--ctx-size')[1].split()[0]
+                print(f"  ctx_size:    {int(ctx):,}")
+            except:
+                pass
+
+        # parallel
+        if '--parallel' in cmd:
+            try:
+                parallel = cmd.split('--parallel')[1].split()[0]
+                print(f"  parallel:    {parallel}")
+            except:
+                pass
+
+        # Sampler args
+        for arg in ['--temp', '--top-nsigma', '--min-p', '--top-p', '--top-k']:
+            if arg in cmd:
+                try:
+                    val = cmd.split(arg)[1].split()[0]
+                    print(f"  {arg.lstrip('-'):<12} {val}")
+                except:
+                    pass
+
+        print(f"  ttl:         {ttl}s")
+
+        if description:
+            print(f"\nDescription: {description}")
+
+        print(f"\nFull command:")
+        # Word wrap the command for readability
+        print(f"  {cmd}")
+
+    print(f"\n({len(matches)} model(s) matching '{args[0]}')")
 
 
 def cmd_sync(args: list[str]):
@@ -482,6 +684,8 @@ def main():
         'remove': cmd_rm,
         'list': cmd_list,
         'ls': cmd_list,
+        'names': cmd_names,
+        'show': cmd_show,
         'sync': cmd_sync,
         'run': cmd_run,
         'stats': cmd_stats,
