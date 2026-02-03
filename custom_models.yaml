@@ -22,15 +22,15 @@ models:
   # ============================================================================
 
   # --- GPT-OSS Derestricted models (supports 128k context) ---
-   gpt-oss-120b-derestricted.mxfp4_moe-gguf:117b-latest:
-     sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
-     ctx_size: 65536
-   gguf-mxfp4-gpt-oss-20b-derestricted:20.9b-latest:
-     sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
-     ctx_size: 65536
-   gpt-oss:20.9b-mxfp4:
-     sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
-     ctx_size: 65536
+  gpt-oss-120b-derestricted-gguf:117b-latest:
+    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+    ctx_size: 65536
+  gpt-oss-20b-derestricted-gguf:20.9b-q8_0:
+    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+    ctx_size: 65536
+  gpt-oss-20b-gguf:20.9b-q8_k_xl:
+    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+    ctx_size: 65536
 
   # --- Gemma models (supports 32k context) ---
    gemma-3-27b-derestricted-gguf:27b-q8_0:
