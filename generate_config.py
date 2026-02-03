@@ -168,8 +168,8 @@ def generate_config(models: list[tuple[str, str]], config: dict, custom_models: 
         # Add prefix to distinguish from Ollama models
         prefixed_id = f"{prefix}{model_id}" if prefix else model_id
 
-        # Default command
-        cmd = f"llama-server --host 127.0.0.1 --port ${{PORT}} --model {model_path} --ctx-size {ctx_size}"
+        # Default command (--metrics enables /metrics endpoint for monitoring)
+        cmd = f"llama-server --host 127.0.0.1 --port ${{PORT}} --model {model_path} --ctx-size {ctx_size} --metrics"
 
         model_config = {
             'cmd': cmd,

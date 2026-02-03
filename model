@@ -10,6 +10,7 @@ Usage:
     ./model list [filter]          List models (optional case-insensitive filter)
     ./model sync                   Just sync and regenerate config
     ./model run <model-name>       Run a model interactively (passthrough to ollama)
+    ./model stats                  Show running models with resource usage
 
 Examples:
     ./model pull gemma3:27b
@@ -341,6 +342,85 @@ def cmd_run(args: list[str]):
     ollama_run(args[0])
 
 
+def cmd_stats(args: list[str]):
+    """Show running models with resource usage."""
+    import requests
+
+    port = os.environ.get('LLAMA_SWAP_PORT', '5847')
+    api_url = f"http://127.0.0.1:{port}"
+
+    # Get running models from llama-swap
+    try:
+        response = requests.get(f"{api_url}/running", timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        running = data.get('running', [])
+    except requests.exceptions.RequestException as e:
+        print(f"Error: Cannot connect to llama-swap at {api_url}")
+        print(f"  {e}")
+        sys.exit(1)
+
+    if not running:
+        print("No models currently loaded")
+        return
+
+    print(f"\n{'='*70}")
+    print(f"{'MODEL':<45} {'CTX':>8} {'SLOTS':>6} {'STATE':>8}")
+    print(f"{'='*70}")
+
+    total_ctx = 0
+    total_slots = 0
+
+    for model_info in running:
+        model_name = model_info.get('model', 'unknown')
+        proxy_url = model_info.get('proxy', '')
+        state = model_info.get('state', 'unknown')
+
+        # Query the model's llama-server for detailed stats
+        ctx_size = 0
+        num_slots = 0
+
+        if proxy_url:
+            try:
+                # Get slot info
+                slots_resp = requests.get(f"{proxy_url}/slots", timeout=2)
+                if slots_resp.ok:
+                    slots = slots_resp.json()
+                    num_slots = len(slots)
+                    if slots:
+                        ctx_size = slots[0].get('n_ctx', 0)
+            except:
+                # Try to parse from cmd if /slots fails
+                cmd = model_info.get('cmd', '')
+                if '--ctx-size' in cmd:
+                    try:
+                        parts = cmd.split('--ctx-size')[1].split()
+                        ctx_size = int(parts[0])
+                    except:
+                        pass
+
+        total_ctx += ctx_size
+        total_slots += num_slots
+
+        # Truncate long model names
+        display_name = model_name[:44] if len(model_name) > 44 else model_name
+        ctx_display = f"{ctx_size:,}" if ctx_size else "-"
+
+        print(f"{display_name:<45} {ctx_display:>8} {num_slots:>6} {state:>8}")
+
+    print(f"{'='*70}")
+    print(f"{'TOTAL':<45} {total_ctx:>8,} {total_slots:>6}")
+    print()
+
+    # System memory
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        print(f"System Memory: {mem.percent}% used ({mem.used/1024**3:.1f}GB / {mem.total/1024**3:.1f}GB)")
+    except ImportError:
+        pass
+
+
 def cmd_help(args: list[str]):
     """Show help."""
     print(__doc__)
@@ -357,6 +437,7 @@ def main():
         'ls': cmd_list,
         'sync': cmd_sync,
         'run': cmd_run,
+        'stats': cmd_stats,
         'help': cmd_help,
         '--help': cmd_help,
         '-h': cmd_help,
