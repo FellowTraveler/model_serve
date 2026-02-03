@@ -387,7 +387,7 @@ def cmd_list_config(filter_term: str = None):
 
 
 def cmd_names(args: list[str]):
-    """Show mapping between Ollama names and llama-swap names."""
+    """Show llama-swap model names (what to use in API requests)."""
     config = load_config()
     models = config.get('models', {})
     filter_term = args[0] if args else None
@@ -396,115 +396,49 @@ def cmd_names(args: list[str]):
         print("No models in config.yaml. Run './model sync' first.")
         return
 
-    # Get Ollama model list for comparison
-    result = subprocess.run(['ollama', 'list'], capture_output=True, text=True, check=False)
-    ollama_lines = result.stdout.strip().split('\n')[1:] if result.returncode == 0 else []
-
-    # Build mapping: extract model name from Ollama output
-    ollama_names = {}
-    for line in ollama_lines:
-        if line.strip():
-            parts = line.split()
-            if parts:
-                ollama_names[parts[0]] = line
-
-    print(f"{'OLLAMA NAME':<55} {'LLAMA-SWAP NAME':<35}")
-    print("=" * 90)
-
-    count = 0
     prefix = os.environ.get('MODEL_PREFIX', 'ls/')
 
-    # Build reverse mapping: directory name -> llama-swap name
-    # Extract directory from model path in cmd
-    dir_to_llama_swap = {}
+    # Group models by family (first part of name before colon or dash)
+    families = {}
     for llama_swap_name, model_config in models.items():
-        cmd = model_config.get('cmd', '')
-        # Extract path from --model <path>
-        if '--model ' in cmd:
-            path_part = cmd.split('--model ')[1].split()[0]
-            # Get the directory name (parent of the .gguf file)
-            # e.g., /path/ollama/gpt-oss-120b-Derestricted.MXFP4_MOE-gguf/file.gguf
-            parts = path_part.split('/ollama/')
-            if len(parts) > 1:
-                dir_name = parts[1].split('/')[0]
-                if dir_name not in dir_to_llama_swap:
-                    dir_to_llama_swap[dir_name] = []
-                dir_to_llama_swap[dir_name].append(llama_swap_name)
-
-    # For each Ollama model, find matching llama-swap names by directory
-    shown = set()
-    for ollama_name in sorted(ollama_names.keys()):
-        # Extract the model identifier from Ollama name
-        # hf.co/user/model-name:tag -> model-name
-        # model:tag -> model
-        ollama_lower = ollama_name.lower()
-
-        # Find matching directory
-        matching_llama_swap = []
-        for dir_name, ls_names in dir_to_llama_swap.items():
-            dir_lower = dir_name.lower()
-            # Check if Ollama name contains the directory name or vice versa
-            # Be precise: the directory should be a substantial part of the Ollama name
-            if '/' in ollama_name:
-                # HuggingFace format: hf.co/user/repo-name:tag
-                repo_part = ollama_name.split('/')[-1].split(':')[0].lower()
-                if repo_part == dir_lower or dir_lower == repo_part:
-                    matching_llama_swap.extend(ls_names)
-            else:
-                # Standard format: model:tag
-                model_part = ollama_name.split(':')[0].lower()
-                if model_part == dir_lower or dir_lower == model_part:
-                    matching_llama_swap.extend(ls_names)
-
-        for llama_swap_name in matching_llama_swap:
-            # Remove prefix to get base name
-            if prefix and llama_swap_name.startswith(prefix):
-                base_name = llama_swap_name[len(prefix):]
-            else:
-                base_name = llama_swap_name
-
-            # Apply filter
-            if filter_term:
-                filter_lower = filter_term.lower()
-                if filter_lower not in base_name.lower() and filter_lower not in llama_swap_name.lower() and filter_lower not in ollama_name.lower():
-                    continue
-
-            # Check for alias (from description)
-            description = models[llama_swap_name].get('description', '')
-            if description.startswith('alias of '):
-                alias_info = f"(alias of {description.split('|')[0].replace('alias of ', '').strip()})"
-                print(f"{alias_info:<55} {llama_swap_name:<35}")
-            else:
-                print(f"{ollama_name:<55} {llama_swap_name:<35}")
-
-            shown.add(llama_swap_name)
-            count += 1
-
-    # Show any llama-swap models not matched to Ollama
-    for llama_swap_name in sorted(models.keys()):
-        if llama_swap_name in shown:
-            continue
-
+        # Remove prefix
         if prefix and llama_swap_name.startswith(prefix):
             base_name = llama_swap_name[len(prefix):]
         else:
             base_name = llama_swap_name
 
-        if filter_term:
-            filter_lower = filter_term.lower()
-            if filter_lower not in base_name.lower() and filter_lower not in llama_swap_name.lower():
-                continue
+        # Apply filter
+        if filter_term and filter_term.lower() not in llama_swap_name.lower():
+            continue
 
-        description = models[llama_swap_name].get('description', '')
-        if description.startswith('alias of '):
-            alias_info = f"(alias of {description.split('|')[0].replace('alias of ', '').strip()})"
-            print(f"{alias_info:<55} {llama_swap_name:<35}")
-        else:
-            print(f"{'(not in ollama)':<55} {llama_swap_name:<35}")
-        count += 1
+        # Get family name (before first colon)
+        family = base_name.split(':')[0] if ':' in base_name else base_name.split('-')[0]
+
+        if family not in families:
+            families[family] = []
+        families[family].append((llama_swap_name, model_config))
+
+    if not families:
+        print(f"No models matching '{filter_term}'")
+        return
+
+    count = 0
+    for family in sorted(families.keys()):
+        print(f"\n{family}:")
+        for llama_swap_name, model_config in sorted(families[family]):
+            description = model_config.get('description', '')
+
+            # Show alias info if present
+            if description.startswith('alias of '):
+                alias_target = description.split('|')[0].replace('alias of ', '').strip()
+                print(f"  {llama_swap_name:<50} (alias of {alias_target})")
+            else:
+                # Extract size from name for display
+                print(f"  {llama_swap_name}")
+            count += 1
 
     print(f"\n({count} models" + (f" matching '{filter_term}'" if filter_term else "") + ")")
-    print("\nTip: Use the llama-swap name (right column) in API requests and custom_models.yaml")
+    print("\nUse these names in API requests and custom_models.yaml (without ls/ prefix for yaml)")
 
 
 def cmd_show(args: list[str]):
