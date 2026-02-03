@@ -10,7 +10,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Set up PATH for cron (which has minimal environment)
 # Include common locations for python3, homebrew, etc.
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+# macOS: /opt/homebrew/bin (Apple Silicon), /usr/local/bin (Intel)
+# Linux: ~/.local/bin (pip --user), /home/linuxbrew/.linuxbrew/bin
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:$PATH"
 
 # Load .env if it exists (for MODELS_DIR, etc.)
 if [ -f "$SCRIPT_DIR/.env" ]; then
