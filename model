@@ -261,12 +261,29 @@ def cleanup_broken_symlinks() -> int:
     return broken_count
 
 
+def get_config_hash() -> str:
+    """Get hash of current config.yaml for change detection."""
+    import hashlib
+    config_path = SCRIPT_DIR / 'config.yaml'
+    if not config_path.exists():
+        return ""
+    return hashlib.md5(config_path.read_bytes()).hexdigest()
+
+
 def do_sync():
-    """Full sync: cleanup + bridge + regenerate + reload."""
+    """Full sync: cleanup + bridge + regenerate + reload if changed."""
+    old_hash = get_config_hash()
+
     cleanup_broken_symlinks()
     sync_bridge()
     regenerate_config()
-    reload_llama_swap()
+
+    new_hash = get_config_hash()
+    if new_hash != old_hash:
+        print("Config changed, reloading llama-swap...")
+        reload_llama_swap()
+    else:
+        print("Config unchanged, skipping reload")
 
 
 def cmd_pull(args: list[str]):
