@@ -35,7 +35,9 @@ def get_running_models(api_url: str) -> list:
     try:
         response = requests.get(f"{api_url}/running", timeout=5)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        # llama-swap returns {"running": ["model1", "model2", ...]}
+        return data.get('running', []) if isinstance(data, dict) else data
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to get running models: {e}")
         return []
@@ -66,21 +68,15 @@ def select_unload_candidate(models: list) -> str | None:
     """
     Select best candidate for unloading.
 
-    Strategy: Unload the model that has been idle longest.
-    If no idle info available, pick the last one in the list.
+    Strategy: Pick the first model in the list.
+    llama-swap returns model names as strings.
     """
     if not models:
         return None
 
-    # Sort by idle time if available, otherwise use list order
-    # llama-swap returns models with idle info when available
-    sorted_models = sorted(
-        models,
-        key=lambda m: m.get('idle_seconds', 0),
-        reverse=True
-    )
-
-    return sorted_models[0].get('model')
+    # Models are strings (model names)
+    # Just pick the first one (oldest loaded)
+    return models[0] if isinstance(models[0], str) else models[0].get('model')
 
 
 def main():
