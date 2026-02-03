@@ -124,6 +124,11 @@ echo ""
 check_deps
 check_python_deps
 
+# Sync models and regenerate config BEFORE starting llama-swap
+echo ""
+echo "Syncing models and generating config..."
+./model sync
+
 echo ""
 start_llama_swap
 
@@ -148,7 +153,6 @@ echo "Endpoints:"
 echo "  POST /v1/chat/completions - Chat completion (OpenAI compatible)"
 echo "  GET  /running             - List loaded models"
 echo "  POST /models/unload       - Unload a model"
-echo "  POST /reload-config       - Reload configuration"
 echo ""
 echo "Press Ctrl+C to stop all services"
 
