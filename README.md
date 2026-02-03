@@ -43,8 +43,8 @@ cd model_serve
 # Generate config from existing Ollama models
 ./model sync
 
-# (Optional) Set up cron to keep server running
-./setup_cron.sh
+# (Optional) Set up cron keep-alive and start server
+./setup_cron.sh start
 ```
 
 If you cloned without `--recursive`:
@@ -200,20 +200,20 @@ After editing, run `./model sync` to regenerate config. If llama-swap is running
 
 ### Keep-Alive with Cron (Optional)
 
-If you want the server to auto-start and stay running (e.g., after reboot), set up a cron job:
+If you want the server to auto-start and stay running (e.g., after reboot), use the cron setup:
 
 ```bash
-# Install cron job (checks/starts server hourly)
+# Install cron job AND start server now
+./setup_cron.sh start
+
+# Check current status
 ./setup_cron.sh
 
-# Verify it's installed
-crontab -l | grep 'model start'
-
-# Remove if no longer needed
-crontab -l | grep -v 'model start' | crontab -
+# Remove cron job AND stop server
+./setup_cron.sh stop
 ```
 
-The cron job runs `./model start` hourly. If the server is already running, it exits immediately. If not, it starts the full stack (llama-swap, sync loop, pressure monitor).
+The cron job runs `./model start` hourly. If the server is already running, it exits immediately. If not, it starts the full stack.
 
 ## How It Works
 

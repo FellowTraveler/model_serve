@@ -1,9 +1,10 @@
 #!/bin/bash
-# Set up cron job to keep model_serve running
+# Manage cron-based keep-alive for model_serve
 #
-# This adds a cron entry to run ./model start hourly.
-# If already running, it exits immediately (safe to run repeatedly).
-# If not running, it starts the full stack.
+# Usage:
+#   ./setup_cron.sh start   Install cron job and start server
+#   ./setup_cron.sh stop    Remove cron job and stop server
+#   ./setup_cron.sh         Show this help
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 START_SCRIPT="$SCRIPT_DIR/model"
@@ -13,25 +14,75 @@ LOG_FILE="$SCRIPT_DIR/model_serve.log"
 # PATH setup for cron's minimal environment (includes homebrew, etc.)
 CRON_ENTRY="0 * * * * PATH=/opt/homebrew/bin:/usr/local/bin:\$HOME/.local/bin:/usr/bin:/bin:\$PATH && cd $SCRIPT_DIR && $START_SCRIPT start >> $LOG_FILE 2>&1"
 
-echo "Setting up cron job for model_serve keep-alive..."
-echo "Script: $START_SCRIPT start"
-echo "Log: $LOG_FILE"
-echo ""
+show_help() {
+    echo "Manage cron-based keep-alive for model_serve"
+    echo ""
+    echo "Usage:"
+    echo "  ./setup_cron.sh start   Install cron job and start server now"
+    echo "  ./setup_cron.sh stop    Remove cron job and stop server"
+    echo ""
+    echo "The cron job runs './model start' hourly. If the server is already"
+    echo "running, it exits immediately. If not, it starts the full stack."
+    echo ""
+    echo "Current status:"
+    if crontab -l 2>/dev/null | grep -q "model start"; then
+        echo "  Cron job: INSTALLED"
+    else
+        echo "  Cron job: not installed"
+    fi
+    if pgrep -f "llama-swap.*--config" > /dev/null; then
+        echo "  Server:   RUNNING"
+    else
+        echo "  Server:   not running"
+    fi
+}
 
-# Check if already installed
-if crontab -l 2>/dev/null | grep -q "model start"; then
-    echo "Cron job already exists. Current crontab:"
-    crontab -l | grep "model start"
-    exit 0
-fi
+do_start() {
+    echo "=== Setting up model_serve keep-alive ==="
+    echo ""
 
-# Add to crontab
-(crontab -l 2>/dev/null; echo "$CRON_ENTRY") | crontab -
+    # Check if cron already installed
+    if crontab -l 2>/dev/null | grep -q "model start"; then
+        echo "Cron job already installed."
+    else
+        # Add to crontab
+        (crontab -l 2>/dev/null; echo "$CRON_ENTRY") | crontab -
+        echo "Cron job installed (hourly keep-alive)."
+    fi
 
-echo "Cron job installed. Will check/start server every hour."
-echo ""
-echo "To verify:"
-echo "  crontab -l | grep 'model start'"
-echo ""
-echo "To remove:"
-echo "  crontab -l | grep -v 'model start' | crontab -"
+    echo ""
+
+    # Start the server now
+    "$START_SCRIPT" start
+}
+
+do_stop() {
+    echo "=== Removing model_serve keep-alive ==="
+    echo ""
+
+    # Remove from crontab
+    if crontab -l 2>/dev/null | grep -q "model start"; then
+        crontab -l | grep -v "model start" | crontab -
+        echo "Cron job removed."
+    else
+        echo "Cron job was not installed."
+    fi
+
+    echo ""
+
+    # Stop the server
+    "$START_SCRIPT" stop
+}
+
+# Main
+case "${1:-}" in
+    start)
+        do_start
+        ;;
+    stop)
+        do_stop
+        ;;
+    *)
+        show_help
+        ;;
+esac
