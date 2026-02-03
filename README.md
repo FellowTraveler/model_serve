@@ -287,6 +287,17 @@ model_serve/
 ## Troubleshooting
 
 **Models not appearing after `ollama pull`:**
+
+Use `./model pull` instead of `ollama pull` to automatically sync:
+```bash
+# Pull from Ollama registry
+./model pull glm-4.7-flash:q4_K_M
+
+# Pull from HuggingFace (use hf.co/ prefix)
+./model pull hf.co/unsloth/GLM-4.7-Flash-GGUF:Q8_K_XL
+```
+
+If you already used `ollama pull` directly, run sync manually:
 ```bash
 ./model sync
 ```
