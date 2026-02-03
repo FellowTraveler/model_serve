@@ -24,12 +24,12 @@ fi
 
 LLAMA_SWAP_PORT="${LLAMA_SWAP_PORT:-5847}"
 
-# Find llama-swap (local bin or system)
+# Find llama-swap (prefer system install, fallback to local bin)
 find_llama_swap() {
-    if [ -x "$SCRIPT_DIR/bin/llama-swap" ]; then
-        echo "$SCRIPT_DIR/bin/llama-swap"
-    elif command -v llama-swap &> /dev/null; then
+    if command -v llama-swap &> /dev/null; then
         command -v llama-swap
+    elif [ -x "$SCRIPT_DIR/bin/llama-swap" ]; then
+        echo "$SCRIPT_DIR/bin/llama-swap"
     else
         echo ""
     fi

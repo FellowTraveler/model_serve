@@ -5,11 +5,16 @@ Unified model management for the model serving stack.
 Wraps Ollama commands and automatically syncs to LM Studio + regenerates config.
 
 Usage:
-    ./model pull <model-name>    Pull a model and sync
-    ./model rm <model-name>      Remove a model and sync
-    ./model list                 List all available models
-    ./model sync                 Just sync and regenerate config
-    ./model run <model-name>     Run a model interactively (passthrough to ollama)
+    ./model pull <model-name>      Pull a model and sync
+    ./model rm <model-name>        Remove a model and sync
+    ./model list [filter]          List models (optional case-insensitive filter)
+    ./model sync                   Just sync and regenerate config
+    ./model run <model-name>       Run a model interactively (passthrough to ollama)
+
+Examples:
+    ./model pull gemma3:27b
+    ./model list derestricted      # Shows only models containing "derestricted"
+    ./model list qwen              # Shows only models containing "qwen"
 """
 
 import os
@@ -53,10 +58,39 @@ def ollama_rm(model_name: str) -> bool:
     return result.returncode == 0
 
 
-def ollama_list() -> bool:
-    """List models in Ollama."""
-    result = run_cmd(['ollama', 'list'], check=False)
-    return result.returncode == 0
+def ollama_list(filter_term: str = None) -> bool:
+    """List models in Ollama, optionally filtered."""
+    if filter_term:
+        # Get output and filter it
+        result = subprocess.run(
+            ['ollama', 'list'],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if result.returncode != 0:
+            print(result.stderr)
+            return False
+
+        lines = result.stdout.strip().split('\n')
+        filter_lower = filter_term.lower()
+
+        # Print header
+        if lines:
+            print(lines[0])
+
+        # Filter and print matching lines
+        count = 0
+        for line in lines[1:]:
+            if filter_lower in line.lower():
+                print(line)
+                count += 1
+
+        print(f"\n({count} models matching '{filter_term}')")
+        return True
+    else:
+        result = subprocess.run(['ollama', 'list'], check=False)
+        return result.returncode == 0
 
 
 def ollama_run(model_name: str) -> bool:
@@ -152,8 +186,9 @@ def cmd_rm(args: list[str]):
 
 
 def cmd_list(args: list[str]):
-    """Handle list command."""
-    ollama_list()
+    """Handle list command with optional filter."""
+    filter_term = args[0] if args else None
+    ollama_list(filter_term)
 
 
 def cmd_sync(args: list[str]):
