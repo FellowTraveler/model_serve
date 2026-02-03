@@ -110,13 +110,25 @@ curl -X POST http://127.0.0.1:5847/models/unload \
 | `MEMORY_PRESSURE_THRESHOLD` | 75 | Memory % to trigger auto-unload |
 | `MODELS_DIR` | ~/.cache/lm-studio/models | Where models are stored |
 | `BRIDGE_SCRIPT` | (bundled) | Path to lm-studio-ollama-bridge (uses submodule by default) |
+| `MODEL_PREFIX` | `ls/` | Prefix for model names to distinguish from Ollama in Open WebUI |
 
-### Custom Sampler Settings
+### Model Naming
+
+Models are prefixed with `ls/` by default so you can distinguish them from Ollama models in Open WebUI:
+- **llama-swap**: `ls/gemma3:12.2b-q8_0`
+- **Ollama**: `hf.co/mradermacher/Gemma-3-27B-Derestricted-GGUF:q8_0`
+
+Change the prefix in `.env` by setting `MODEL_PREFIX` (or set to empty to disable).
+
+### Custom Sampler Settings (Optional)
+
+Custom sampler settings are **optional** - the defaults work fine for most models. Add them later if you want to fine-tune specific models (e.g., lower temperature for coding).
 
 Edit `custom_models.yaml` to configure per-model sampling:
 
 ```yaml
 models:
+  # Use model name WITHOUT the ls/ prefix
   gemma3:27.4b-q8_0:
     sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
 
@@ -124,6 +136,8 @@ models:
     sampler_args: "--top-p 0.9 --temp 0.2"
     ttl: 3600  # Keep loaded longer
 ```
+
+After editing, run `./model sync` to regenerate config. The server auto-reloads.
 
 Custom settings are preserved when regenerating `config.yaml`.
 
