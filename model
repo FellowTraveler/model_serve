@@ -123,12 +123,39 @@ def sync_bridge() -> bool:
     return result.returncode == 0
 
 
+def find_python_with_yaml() -> str:
+    """Find a Python interpreter that has PyYAML installed."""
+    candidates = [
+        '/opt/miniconda3/bin/python3',  # Conda
+        '/opt/homebrew/bin/python3',     # Homebrew Apple Silicon
+        '/usr/local/bin/python3',        # Homebrew Intel / Linux
+        'python3',                        # Whatever's in PATH
+        sys.executable,                   # Current interpreter
+    ]
+
+    for python in candidates:
+        try:
+            result = subprocess.run(
+                [python, '-c', 'import yaml'],
+                capture_output=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                return python
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+
+    # Fallback to current interpreter
+    return sys.executable
+
+
 def regenerate_config() -> bool:
     """Regenerate llama-swap config."""
     print(f"\n=== Regenerating config ===\n")
 
+    python = find_python_with_yaml()
     generate_script = SCRIPT_DIR / 'generate_config.py'
-    result = run_cmd([sys.executable, str(generate_script)], check=False)
+    result = run_cmd([python, str(generate_script)], check=False)
     return result.returncode == 0
 
 
