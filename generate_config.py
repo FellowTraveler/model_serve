@@ -158,7 +158,12 @@ def generate_config(models: list[tuple[str, str]], config: dict, custom_models: 
     prefix = config.get('model_prefix', '')
 
     for model_id, model_path in models:
-        ctx_size = estimate_ctx_size(model_path, config['default_ctx_size'])
+        # Check for custom ctx_size first, otherwise estimate
+        custom = custom_models.get(model_id)
+        if custom and 'ctx_size' in custom:
+            ctx_size = custom['ctx_size']
+        else:
+            ctx_size = estimate_ctx_size(model_path, config['default_ctx_size'])
 
         # Add prefix to distinguish from Ollama models
         prefixed_id = f"{prefix}{model_id}" if prefix else model_id

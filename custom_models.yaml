@@ -5,6 +5,7 @@
 #   sampler_args: Additional args appended to llama-server command
 #   cmd: Full command override (use ${MODEL_PATH} and ${PORT} placeholders)
 #   ttl: Custom idle timeout in seconds
+#   ctx_size: Custom context size (overrides auto-estimated value)
 #
 # Model names should NOT include the ls/ prefix
 # Model names come from the symlinks created by lm-studio-ollama-bridge
@@ -21,92 +22,129 @@ models:
   # General models (temp 1.2 - works well with top-nsigma + min-p)
   # ============================================================================
 
-  # --- GPT-OSS Derestricted models ---
+  # --- GPT-OSS Derestricted models (supports 128k context) ---
   # gpt-oss-120b-derestricted.mxfp4_moe-gguf:117b-unknown:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 65536
   # gpt-oss-120b-derestricted-gguf:117b-unknown:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 65536
   # gpt-oss-20b-derestricted-gguf:20.9b-unknown:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 65536
   # gguf-mxfp4-gpt-oss-20b-derestricted:20.9b-unknown:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 65536
 
-  # --- Gemma models ---
+  # --- Gemma models (supports 32k context) ---
   # gemma-3-27b-derestricted-gguf:27b-unknown:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # gemma3:12.2b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # gemma3:4.3b-f16:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # gemma3:27.4b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # medgemma3:27.0b-q4_k_m:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # translategemma:12.2b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # QAT models (Ollama "qat" = actual q4_0 quantization in GGUF):
   # gemma3:12.2b-q4_0:  # gemma3:12b-it-qat in Ollama
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # gemma3:4.3b-q4_0:  # gemma3:4b-it-qat in Ollama
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # gemma3:999.89m-q4_0:  # gemma3:1b-it-qat in Ollama
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
 
-  # --- GLM models ---
+  # --- GLM models (supports 128k context) ---
   # glm-4.7-flash-gguf:29.9b-unknown:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 65536
   # glm-4.7-flash-derestricted-gguf:29.9b-unknown:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 65536
 
-  # --- Qwen3 models ---
+  # --- Qwen3 models (supports 32k context) ---
   # qwen3-vl:31.1b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # qwen3-next:79.7b-q4_k_m:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # qwen3:32.8b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # qwen3:32.8b-q4_k_m:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # qwen3:14.8b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # qwen3:8.2b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # qwen3:4.0b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # qwen3:2.0b-q4_k_m:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
   # qwen3:751.63m-q4_k_m:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 32768
 
-  # --- Llama models ---
+  # --- Llama models (supports 128k context) ---
   # llama3.2:3.2b-f16:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 65536
   # llama3.2:1.2b-f16:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 65536
   # llama3.3:70.6b-q6_k:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+  #   ctx_size: 65536
 
   # ============================================================================
   # Mistral models (temp 0.7 - these models prefer lower temperature)
+  # Supports 32k context
   # ============================================================================
   # mistral-small3.2:24.0b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+  #   ctx_size: 32768
   # mistral-small3.2:24.0b-q4_k_m:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+  #   ctx_size: 32768
   # ministral-3:13.9b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+  #   ctx_size: 32768
   # ministral-3:8.9b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+  #   ctx_size: 32768
   # ministral-3:3.8b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+  #   ctx_size: 32768
 
   # ============================================================================
   # Coding models (temp 0.4 - lower for more deterministic code generation)
+  # Supports 32k context
   # ============================================================================
   # devstral-small-2:24.0b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.4"
+  #   ctx_size: 32768
   # devstral-small-2:24.0b-q4_k_m:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.4"
+  #   ctx_size: 32768
   # codestral:22.2b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.4"
+  #   ctx_size: 32768
   #   ttl: 3600  # Keep loaded longer for coding sessions
