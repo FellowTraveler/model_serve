@@ -98,6 +98,15 @@ if [ ! -f .env ]; then
     echo "✓ Created .env - review and customize as needed"
 fi
 
+# Create MODELS_DIR if it doesn't exist (in case LM Studio isn't installed)
+echo ""
+echo "Ensuring models directory exists..."
+source .env 2>/dev/null || true
+MODELS_DIR="${MODELS_DIR:-$HOME/.cache/lm-studio/models}"
+MODELS_DIR="${MODELS_DIR/#\~/$HOME}"  # Expand ~
+mkdir -p "$MODELS_DIR"
+echo "✓ Models directory: $MODELS_DIR"
+
 echo ""
 echo "=== Installation Complete ==="
 echo ""
@@ -107,8 +116,8 @@ echo "  llama-swap --help"
 echo ""
 echo "Next steps:"
 echo "  1. Generate config:  ./model sync"
-echo "  2. Start the stack:  ./start.sh"
-echo "  3. Set up cron:      ./setup_cron.sh   (optional, for hourly auto-sync)"
+echo "  2. Start the stack:  ./model start"
+echo "  3. (Optional) Install as service: ./setup_service.sh install"
 echo ""
 echo "Usage:"
 echo "  ./model pull <name>    Pull a model"
