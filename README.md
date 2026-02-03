@@ -222,10 +222,24 @@ Available settings:
 - `base_model`: Create an alias pointing to another model's file (same GGUF, different settings)
 - `cmd`: Full command override (use `${MODEL_PATH}` and `${PORT}` placeholders)
 
-**Sampler notes:**
-- `--top-nsigma`: Adaptive sampling based on logit std deviation (1.5 balanced, 2.0 creative)
-- `--min-p`: Filters tokens below X% of top token probability (0.05 balanced, 0.02 creative)
-- `--temp`: Temperature (1.0 balanced, 1.4 creative, 0.7 Mistral, 0.4 coding)
+**Sampler args** (passed to llama-server via `sampler_args`):
+
+| Arg | Default | Description |
+|-----|---------|-------------|
+| `--temp` | 0.8 | Temperature (1.0 balanced, 1.4 creative, 0.4 coding) |
+| `--top-k` | 40 | Top-k sampling (0 = disabled) |
+| `--top-p` | 0.95 | Top-p / nucleus sampling (1.0 = disabled) |
+| `--min-p` | 0.05 | Min-p sampling - filters tokens below X% of top token prob (0.0 = disabled) |
+| `--top-nsigma` | -1 | Top-n-sigma - adaptive sampling based on logit std deviation (-1 = disabled, try 1.5-2.0) |
+| `--repeat-penalty` | 1.0 | Penalize repeated tokens (1.0 = disabled) |
+| `--presence-penalty` | 0.0 | Presence penalty for repetition (0.0 = disabled) |
+| `--frequency-penalty` | 0.0 | Frequency penalty for repetition (0.0 = disabled) |
+
+**Recommended combinations:**
+- **Balanced**: `--top-nsigma 1.5 --min-p 0.05 --temp 1.0` (top-p/top-k disabled)
+- **Creative**: `--top-nsigma 2.0 --min-p 0.02 --temp 1.4`
+- **Coding**: `--top-nsigma 1.5 --min-p 0.05 --temp 0.4`
+- **Mistral models**: Use `--temp 0.7` (these models prefer lower temperature)
 
 After editing, run `./model sync` to regenerate config. If llama-swap is running and the config changed, it will automatically restart to pick up the new settings.
 
