@@ -1,20 +1,20 @@
 # Model Serve
 
-Multi-model LLM inference server for macOS Apple Silicon. Serves multiple models on a single OpenAI-compatible API endpoint with on-demand loading and automatic unloading.
+A wrapper around [llama-swap](https://github.com/mostlygeek/llama-swap) that manages Ollama models on a single OpenAI-compatible API endpoint. Designed for users who want to serve multiple models simultaneously without duplicate storage, with access to advanced sampler settings like min-p and top-n-sigma (top-σ).
+
+Works on **macOS** (Intel and Apple Silicon) and **Linux**.
 
 ## Why This Exists
 
-**On-Demand + Keep-Loaded Behavior** - Loading large models (e.g., 120B) is expensive. We want models to load on first request and stay loaded until idle timeout or memory pressure—not reload on every request.
+**No Duplicate Models** - If you use both Ollama and LM Studio, you don't want two copies of every model. This project syncs Ollama models to a shared directory via symlinks.
 
-**Single API Port** - Simplifies client code (agents, web apps). No need to manage multiple ports for different models. Just specify the model name in the API request.
+**Single API Port** - Serve all your models on one port. Simplifies client code (agents, web apps). Just specify the model name in the API request.
 
-**Shared Model Directory** - Uses symlinked LM Studio models directory. No redundant storage—models downloaded via Ollama are served directly.
+**On-Demand Loading** - Models load on first request and stay loaded until idle timeout or memory pressure. Large models (120B+) don't reload on every request.
 
 **Pressure-Aware Unloading** - TTL-based unloading isn't enough. When memory is high, automatically unload idle models to prevent OOM.
 
-**Advanced Sampling** - Per-model control of top-n-sigma, min-p, temperature, etc. Different tasks benefit from different sampling behavior.
-
-**Native macOS Execution** - No Docker overhead. Native builds on Apple Silicon (M1/M2/M3) for maximum throughput and memory efficiency.
+**Advanced Sampling** - Per-model control of min-p, top-n-sigma (top-σ), temperature, etc. Different tasks benefit from different sampling behavior.
 
 ## Features
 
@@ -22,13 +22,14 @@ Multi-model LLM inference server for macOS Apple Silicon. Serves multiple models
 - **On-demand loading** - Models load when first requested, not at startup
 - **Auto-unload** - Models unload after idle timeout (TTL) or memory pressure
 - **Ollama integration** - Pull/remove models with automatic config sync
-- **Custom samplers** - Configure per-model sampling parameters (ctx_size, temperature, etc.)
+- **Advanced samplers** - Per-model min-p, top-n-sigma (top-σ), temperature, ctx_size
 
 ## Prerequisites
 
-- macOS with Apple Silicon (M1/M2/M3)
-- [Homebrew](https://brew.sh)
-- [Ollama](https://ollama.ai) installed
+- **macOS** (Intel or Apple Silicon) or **Linux**
+- [Ollama](https://ollama.ai) installed (required for model management)
+- [Homebrew](https://brew.sh) (macOS) or Go compiler (Linux, for building dependencies)
+- **Optional:** [LM Studio](https://lmstudio.ai) - if installed, models appear in both UIs
 
 ## Installation
 
@@ -43,8 +44,10 @@ cd model_serve
 # Generate config from existing Ollama models
 ./model sync
 
-# (Optional) Set up cron keep-alive and start server
-./setup_cron.sh start
+# (Optional) Install as system service for auto-start on boot
+./setup_service.sh install   # Recommended: launchd (macOS) or systemd (Linux)
+# OR
+./setup_cron.sh start        # Fallback: hourly cron job
 ```
 
 If you cloned without `--recursive`:
@@ -68,7 +71,7 @@ git submodule update --init --recursive
 ./model stop
 ```
 
-The server runs on port 5847 by default (configurable in `.env`).
+llama-swap listens on port 5847 by default (configurable via `LLAMA_SWAP_PORT` in `.env`).
 
 ### Model Management
 
@@ -112,6 +115,8 @@ System Memory: 65.2% used (83.5GB / 128.0GB)
 
 ### API Endpoints
 
+These are llama-swap endpoints (port 5847 by default):
+
 ```bash
 # Chat completion (OpenAI-compatible)
 curl http://127.0.0.1:5847/v1/chat/completions \
@@ -128,12 +133,6 @@ curl http://127.0.0.1:5847/running
 curl -X POST "http://127.0.0.1:5847/unload?model=ls/gemma3:12.2b-q8_0"
 ```
 
-### Stop the Server
-
-```bash
-./stop.sh
-```
-
 ## Configuration
 
 ### Environment Variables (.env)
@@ -144,12 +143,28 @@ curl -X POST "http://127.0.0.1:5847/unload?model=ls/gemma3:12.2b-q8_0"
 | `MODEL_TTL` | 1800 | Idle timeout in seconds (30 min) |
 | `MEMORY_PRESSURE_THRESHOLD` | 75 | Memory % to trigger auto-unload (increase to 85+ for 128GB systems) |
 | `PRESSURE_CHECK_INTERVAL` | 30 | Seconds between memory pressure checks |
-| `MODELS_DIR` | ~/.cache/lm-studio/models | Where models are stored |
+| `MODELS_DIR` | ~/.cache/lm-studio/models | Where model symlinks are created (see below) |
 | `BRIDGE_SCRIPT` | (bundled) | Path to lm-studio-ollama-bridge (uses submodule by default) |
 | `MODEL_PREFIX` | `ls/` | Prefix for model names to distinguish from Ollama in Open WebUI |
 | `DEFAULT_CTX_SIZE` | 8192 | Default context size for models without custom settings |
 | `DEFAULT_PARALLEL` | 1 | Slots per model (1 = single-user, saves memory; 4 = multi-user) |
 | `BRIDGE_SYNC_INTERVAL` | 3600 | Seconds between automatic syncs (when using start.sh) |
+
+### Models Directory Structure
+
+The bridge syncs Ollama models to `MODELS_DIR` with this structure:
+
+```
+MODELS_DIR/
+└── ollama/
+    ├── gemma3/
+    │   └── gemma3-12.2B-Q8_0.gguf  → (symlink to Ollama blob)
+    ├── codestral/
+    │   └── codestral-22.2B-Q8_0.gguf  → (symlink to Ollama blob)
+    └── ...
+```
+
+**LM Studio is optional.** The default `MODELS_DIR` is LM Studio's cache directory, so if you have LM Studio installed, synced models appear in both UIs automatically. But you can set `MODELS_DIR` to any directory—the bridge creates the required structure.
 
 ### Model Naming
 
@@ -240,12 +255,12 @@ The cron job runs `./model start` hourly. If the server is already running, it e
 
 ## How It Works
 
-1. **Ollama** downloads and manages model files
-2. **lm-studio-ollama-bridge** (bundled submodule) creates symlinks in LM Studio's model directory
-3. **generate_config.py** scans for models, merges custom settings, and creates `config.yaml`
-4. **llama-swap** routes requests to the right model, spawning llama-server instances on demand
+1. **Ollama** downloads and manages model files (stored as blobs)
+2. **lm-studio-ollama-bridge** (bundled) creates symlinks in `MODELS_DIR` pointing to Ollama blobs
+3. **generate_config.py** scans `MODELS_DIR` for GGUF files, merges custom settings, creates `config.yaml`
+4. **llama-swap** routes API requests to the right model, spawning llama-server instances on demand
 5. **pressure_unloader.py** monitors memory and unloads idle models when pressure is high
-6. **sync_loop.sh** periodically syncs models and restarts llama-swap if config changed
+6. **sync_loop.sh** periodically re-syncs models and restarts llama-swap if config changed
 
 ## File Structure
 
@@ -287,7 +302,7 @@ which llama-swap
 
 **Model loading fails:**
 ```bash
-# Check the model file exists
+# Check the model symlink exists (default MODELS_DIR shown)
 ls -la ~/.cache/lm-studio/models/ollama/<model-name>/
 ```
 
