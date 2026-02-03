@@ -198,9 +198,30 @@ Available settings:
 
 After editing, run `./model sync` to regenerate config. If llama-swap is running and the config changed, it will automatically restart to pick up the new settings.
 
-### Keep-Alive with Cron (Optional)
+### Run as System Service (Recommended)
 
-If you want the server to auto-start and stay running (e.g., after reboot), use the cron setup:
+For persistent operation that survives logout and auto-starts on boot:
+
+```bash
+# Install and start the service
+./setup_service.sh install
+
+# Check status
+./setup_service.sh status
+
+# Stop/start the service
+./setup_service.sh stop
+./setup_service.sh start
+
+# Uninstall completely
+./setup_service.sh uninstall
+```
+
+This uses **launchd** on macOS and **systemd** on Linux. The service auto-restarts if it crashes and starts on login.
+
+### Keep-Alive with Cron (Fallback)
+
+If system services don't work for your setup, use cron as a fallback:
 
 ```bash
 # Install cron job AND start server now
@@ -215,6 +236,8 @@ If you want the server to auto-start and stay running (e.g., after reboot), use 
 
 The cron job runs `./model start` hourly. If the server is already running, it exits immediately. If not, it starts the full stack.
 
+**Note:** Cron jobs may not survive logout on some systems. Use `setup_service.sh` for reliable persistence.
+
 ## How It Works
 
 1. **Ollama** downloads and manages model files
@@ -228,12 +251,13 @@ The cron job runs `./model start` hourly. If the server is already running, it e
 
 ```
 model_serve/
-├── model                      # Main CLI (pull, rm, list, sync, stats, run)
+├── model                      # Main CLI (pull, rm, list, sync, stats, start, stop, status)
 ├── start.sh                   # Start the server stack
 ├── stop.sh                    # Stop all services
 ├── status.sh                  # Check running status
 ├── install.sh                 # Install dependencies
-├── setup_cron.sh              # Set up cron keep-alive (auto-start if not running)
+├── setup_service.sh           # Install as system service (launchd/systemd)
+├── setup_cron.sh              # Cron-based keep-alive (fallback)
 ├── generate_config.py         # Discover models → config.yaml
 ├── sync_bridge.sh             # Sync wrapper with PATH setup (used by sync_loop.sh)
 ├── sync_loop.sh               # Periodic sync loop (used by start.sh)
@@ -289,3 +313,15 @@ Then restart the server.
 ## License
 
 MIT
+
+## See my AGI Articles:
+
+### [Pondering AGI](https://christopherdavidodom.substack.com/p/pondering-agi)
+[![Pondering AGI](https://substackcdn.com/image/fetch/w_600,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fed39229d-fefd-4030-8b62-52f8cb2b0f05_1024x768.jpeg)](https://christopherdavidodom.substack.com/p/pondering-agi)
+
+### [Pondering AGI Part 2](https://christopherdavidodom.substack.com/p/pondering-agi-part-2)
+[![Pondering AGI Part 2](https://substackcdn.com/image/fetch/w_600,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F6815d224-5ae0-4e71-bd50-f14c3525cce9_725x522.png)](https://christopherdavidodom.substack.com/p/pondering-agi-part-2)
+
+### [Pondering AGI Part 3](https://christopherdavidodom.substack.com/p/pondering-agi-part-3)
+[![Pondering AGI Part 3](https://substackcdn.com/image/fetch/$s_!ooN_!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F504d2f57-a02f-4313-b76e-aa279783df7f_796x568.png)](https://christopherdavidodom.substack.com/p/pondering-agi-part-3)
+
