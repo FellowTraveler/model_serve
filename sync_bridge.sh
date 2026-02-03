@@ -14,18 +14,22 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
     source "$SCRIPT_DIR/.env"
 fi
 
-BRIDGE_SCRIPT="${BRIDGE_SCRIPT:-/Users/au/src/lm-studio-ollama-bridge/lm-studio-ollama-bridge}"
+# Expand ~ in paths
+BRIDGE_SCRIPT="${BRIDGE_SCRIPT/#\~/$HOME}"
 LLAMA_SWAP_PORT="${LLAMA_SWAP_PORT:-5847}"
 API_URL="http://127.0.0.1:${LLAMA_SWAP_PORT}"
 
 # Step 1: Run bridge sync
 echo "$(date): Running Ollama-LM Studio bridge sync..."
 
-if [ -x "$BRIDGE_SCRIPT" ]; then
+if [ -z "$BRIDGE_SCRIPT" ]; then
+    echo "$(date): BRIDGE_SCRIPT not set in .env, skipping bridge sync"
+elif [ -x "$BRIDGE_SCRIPT" ]; then
     "$BRIDGE_SCRIPT"
     echo "$(date): Bridge sync completed"
 else
-    echo "$(date): Warning - Bridge script not found or not executable: $BRIDGE_SCRIPT"
+    echo "$(date): Warning - Bridge script not found: $BRIDGE_SCRIPT"
+    echo "$(date): Get it from: https://github.com/nicobrenner/lm-studio-ollama-bridge"
 fi
 
 # Step 2: Regenerate config

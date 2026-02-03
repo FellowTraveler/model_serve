@@ -102,15 +102,22 @@ def ollama_run(model_name: str) -> bool:
 
 def sync_bridge() -> bool:
     """Run the Ollama-LM Studio bridge sync."""
-    bridge_script = os.environ.get(
-        'BRIDGE_SCRIPT',
-        '/Users/au/src/lm-studio-ollama-bridge/lm-studio-ollama-bridge'
-    )
+    bridge_script = os.environ.get('BRIDGE_SCRIPT', '')
+
+    # Expand ~ to home directory
+    if bridge_script.startswith('~'):
+        bridge_script = os.path.expanduser(bridge_script)
 
     print(f"\n=== Syncing to LM Studio ===\n")
 
+    if not bridge_script:
+        print("BRIDGE_SCRIPT not set in .env, skipping bridge sync")
+        print("Get it from: https://github.com/nicobrenner/lm-studio-ollama-bridge")
+        return False
+
     if not os.path.exists(bridge_script):
         print(f"Warning: Bridge script not found: {bridge_script}")
+        print("Get it from: https://github.com/nicobrenner/lm-studio-ollama-bridge")
         return False
 
     result = run_cmd([bridge_script], check=False)
