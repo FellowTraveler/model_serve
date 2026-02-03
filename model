@@ -108,9 +108,9 @@ def sync_bridge() -> bool:
     if bridge_script.startswith('~'):
         bridge_script = os.path.expanduser(bridge_script)
 
-    # Default to bundled submodule if not set
+    # Default to bin/ if not set
     if not bridge_script:
-        bridge_script = str(SCRIPT_DIR / 'lm-studio-ollama-bridge' / 'lm-studio-ollama-bridge')
+        bridge_script = str(SCRIPT_DIR / 'bin' / 'lm-studio-ollama-bridge')
 
     print(f"\n=== Syncing to LM Studio ===\n")
 

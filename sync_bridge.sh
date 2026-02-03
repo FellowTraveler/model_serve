@@ -19,9 +19,9 @@ BRIDGE_SCRIPT="${BRIDGE_SCRIPT/#\~/$HOME}"
 LLAMA_SWAP_PORT="${LLAMA_SWAP_PORT:-5847}"
 API_URL="http://127.0.0.1:${LLAMA_SWAP_PORT}"
 
-# Default to bundled submodule if not set
+# Default to bin/ if not set
 if [ -z "$BRIDGE_SCRIPT" ]; then
-    BRIDGE_SCRIPT="$SCRIPT_DIR/lm-studio-ollama-bridge/lm-studio-ollama-bridge"
+    BRIDGE_SCRIPT="$SCRIPT_DIR/bin/lm-studio-ollama-bridge"
 fi
 
 # Step 1: Run bridge sync

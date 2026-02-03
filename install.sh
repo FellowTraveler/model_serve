@@ -15,9 +15,11 @@ git submodule update --init --recursive
 echo "✓ Submodules initialized"
 echo ""
 
-# Build lm-studio-ollama-bridge
-BRIDGE_DIR="$SCRIPT_DIR/lm-studio-ollama-bridge"
-BRIDGE_BIN="$BRIDGE_DIR/lm-studio-ollama-bridge"
+# Build lm-studio-ollama-bridge into bin/
+BRIDGE_SRC="$SCRIPT_DIR/lm-studio-ollama-bridge"
+BRIDGE_BIN="$SCRIPT_DIR/bin/lm-studio-ollama-bridge"
+
+mkdir -p "$SCRIPT_DIR/bin"
 
 if [ ! -x "$BRIDGE_BIN" ]; then
     echo "Building lm-studio-ollama-bridge..."
@@ -25,10 +27,10 @@ if [ ! -x "$BRIDGE_BIN" ]; then
         echo "Go not found. Installing via Homebrew..."
         brew install go
     fi
-    cd "$BRIDGE_DIR"
-    go build -o lm-studio-ollama-bridge ./cmd/lm-studio-ollama-bridge
+    cd "$BRIDGE_SRC"
+    go build -o "$BRIDGE_BIN" ./cmd/ollama-sync
     cd "$SCRIPT_DIR"
-    echo "✓ lm-studio-ollama-bridge built"
+    echo "✓ lm-studio-ollama-bridge built to bin/"
 else
     echo "✓ lm-studio-ollama-bridge already built"
 fi
