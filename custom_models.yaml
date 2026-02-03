@@ -39,8 +39,13 @@ models:
   #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
   # translategemma:12.2b-q8_0:
   #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
-  # NOTE: gemma3 QAT models (1b/4b/12b-it-qat) are not synced by the bridge
-  # due to a bug with manifests containing a "from" field. Bridge fix required.
+  # QAT models (Ollama "qat" = actual q4_0 quantization in GGUF):
+  # gemma3:12.2b-q4_0:  # gemma3:12b-it-qat in Ollama
+  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  # gemma3:4.3b-q4_0:  # gemma3:4b-it-qat in Ollama
+  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
+  # gemma3:999.89m-q4_0:  # gemma3:1b-it-qat in Ollama
+  #   sampler_args: "--top-nsigma 1.5 --top-k 0 --top-p 0.95 --temp 0.7"
 
   # --- GLM models ---
   # glm-4.7-flash-gguf:29.9b-unknown:
