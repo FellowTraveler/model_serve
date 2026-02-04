@@ -102,43 +102,52 @@ models:
     ctx_size: 65536
 
   # --- Qwen3 models (supports 32k context) ---
-  # Qwen3 is a thinking model; --reasoning-budget 0 disables thinking
+  # Qwen3 is a thinking model; disable via chat_template_kwargs (--reasoning-budget 0 is buggy)
   # Per Qwen guidance: temp 0.6, top-p 0.95, top-k 40, repeat-penalty 1.05
   qwen3-vl-31.1b-q8_0:
     jinja: true
-    sampler_args: "--reasoning-budget 0 --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    chat_template_kwargs: '{"enable_thinking": false}'
+    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
     ctx_size: 32768
   qwen3-next-79.7b-q4_k_m:
     jinja: true
-    sampler_args: "--reasoning-budget 0 --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    chat_template_kwargs: '{"enable_thinking": false}'
+    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
     ctx_size: 32768
   qwen3-32.8b-q8_0:
     jinja: true
-    sampler_args: "--reasoning-budget 0 --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    chat_template_kwargs: '{"enable_thinking": false}'
+    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
     ctx_size: 32768
   qwen3-32.8b-q4_k_m:
     jinja: true
-    sampler_args: "--reasoning-budget 0 --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    chat_template_kwargs: '{"enable_thinking": false}'
+    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
     ctx_size: 32768
   qwen3-14.8b-q8_0:
     jinja: true
-    sampler_args: "--reasoning-budget 0 --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    chat_template_kwargs: '{"enable_thinking": false}'
+    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
     ctx_size: 32768
   qwen3-8.2b-q8_0:
     jinja: true
-    sampler_args: "--reasoning-budget 0 --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    chat_template_kwargs: '{"enable_thinking": false}'
+    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
     ctx_size: 32768
   qwen3-4.0b-q8_0:
     jinja: true
-    sampler_args: "--reasoning-budget 0 --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    chat_template_kwargs: '{"enable_thinking": false}'
+    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
     ctx_size: 32768
   qwen3-2.0b-q4_k_m:
     jinja: true
-    sampler_args: "--reasoning-budget 0 --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    chat_template_kwargs: '{"enable_thinking": false}'
+    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
     ctx_size: 32768
   qwen3-751.63m-q4_k_m:
     jinja: true
-    sampler_args: "--reasoning-budget 0 --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    chat_template_kwargs: '{"enable_thinking": false}'
+    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
     ctx_size: 32768
 
   # --- Llama models (supports 128k context) ---

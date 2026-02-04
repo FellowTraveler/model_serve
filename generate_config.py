@@ -215,6 +215,10 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
                 if 'chat_template_file' in custom:
                     model_config['cmd'] = f"{model_config['cmd']} --chat-template-file {custom['chat_template_file']}"
 
+                # Allow chat template kwargs (for thinking model control)
+                if 'chat_template_kwargs' in custom:
+                    model_config['cmd'] = f"{model_config['cmd']} --chat-template-kwargs '{custom['chat_template_kwargs']}'"
+
                 # Allow full cmd override
                 if 'cmd' in custom:
                     model_config['cmd'] = custom['cmd'].replace('${MODEL_PATH}', symlink_path)
@@ -259,6 +263,10 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
             # Allow custom chat template (for models that need relaxed role alternation)
             if 'chat_template_file' in custom:
                 cmd = f"{cmd} --chat-template-file {custom['chat_template_file']}"
+
+            # Allow chat template kwargs (for thinking model control)
+            if 'chat_template_kwargs' in custom:
+                cmd = f"{cmd} --chat-template-kwargs '{custom['chat_template_kwargs']}'"
 
             llama_swap_config['models'][prefixed_id] = {
                 'cmd': cmd,
