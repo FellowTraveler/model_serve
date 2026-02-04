@@ -201,13 +201,19 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
             if custom is None:
                 pass
             else:
+                # Add --jinja flag if specified (server flag, not sampler)
+                if custom.get('jinja', False):
+                    cmd = f"{cmd} --jinja"
+
                 # Allow custom sampler args to be appended
                 if 'sampler_args' in custom:
                     model_config['cmd'] = f"{cmd} {custom['sampler_args']}"
+                else:
+                    model_config['cmd'] = cmd
 
                 # Allow custom chat template (for models that need relaxed role alternation)
                 if 'chat_template_file' in custom:
-                    model_config['cmd'] = f"{model_config['cmd']} --jinja --chat-template-file {custom['chat_template_file']}"
+                    model_config['cmd'] = f"{model_config['cmd']} --chat-template-file {custom['chat_template_file']}"
 
                 # Allow full cmd override
                 if 'cmd' in custom:
@@ -243,12 +249,16 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
 
             cmd = f"llama-server --host 127.0.0.1 --port ${{PORT}} --model {symlink_path} --ctx-size {ctx_size} --parallel {parallel} --metrics"
 
+            # Add --jinja flag if specified (server flag, not sampler)
+            if custom.get('jinja', False):
+                cmd = f"{cmd} --jinja"
+
             if 'sampler_args' in custom:
                 cmd = f"{cmd} {custom['sampler_args']}"
 
             # Allow custom chat template (for models that need relaxed role alternation)
             if 'chat_template_file' in custom:
-                cmd = f"{cmd} --jinja --chat-template-file {custom['chat_template_file']}"
+                cmd = f"{cmd} --chat-template-file {custom['chat_template_file']}"
 
             llama_swap_config['models'][prefixed_id] = {
                 'cmd': cmd,
