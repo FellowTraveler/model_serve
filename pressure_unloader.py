@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import logging
+from typing import Optional
 import requests
 import psutil
 
@@ -64,7 +65,7 @@ def get_memory_usage() -> float:
     return psutil.virtual_memory().percent
 
 
-def select_unload_candidate(models: list) -> str | None:
+def select_unload_candidate(models: list) -> Optional[str]:
     """
     Select best candidate for unloading.
 
