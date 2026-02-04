@@ -205,6 +205,10 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
                 if 'sampler_args' in custom:
                     model_config['cmd'] = f"{cmd} {custom['sampler_args']}"
 
+                # Allow custom chat template (for models that need relaxed role alternation)
+                if 'chat_template_file' in custom:
+                    model_config['cmd'] = f"{model_config['cmd']} --jinja --chat-template-file {custom['chat_template_file']}"
+
                 # Allow full cmd override
                 if 'cmd' in custom:
                     model_config['cmd'] = custom['cmd'].replace('${MODEL_PATH}', symlink_path)
@@ -241,6 +245,10 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
 
             if 'sampler_args' in custom:
                 cmd = f"{cmd} {custom['sampler_args']}"
+
+            # Allow custom chat template (for models that need relaxed role alternation)
+            if 'chat_template_file' in custom:
+                cmd = f"{cmd} --jinja --chat-template-file {custom['chat_template_file']}"
 
             llama_swap_config['models'][prefixed_id] = {
                 'cmd': cmd,
