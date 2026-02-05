@@ -427,13 +427,14 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
 
     url = f"{LLAMA_SWAP_BASE}/v1/chat/completions"
 
-    async with httpx.AsyncClient(timeout=None) as client:
-        if stream:
-            # Streaming response
-            async def iter_sse():
-                parser = StreamableParser(ENC, role=Role.ASSISTANT)
-                state = HarmonySessionState()
+    if stream:
+        # Streaming response - client must be created inside generator
+        # to avoid closing before iteration starts
+        async def iter_sse():
+            parser = StreamableParser(ENC, role=Role.ASSISTANT)
+            state = HarmonySessionState()
 
+            async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream("POST", url, json=llama_req, timeout=None) as resp:
                     async for line in resp.aiter_lines():
                         if not line.startswith("data: "):
@@ -456,25 +457,26 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                         except json.JSONDecodeError:
                             continue
 
-                # Emit final stop chunk
-                stop_chunk = {
-                    "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
-                    "object": "chat.completion.chunk",
-                    "model": model,
-                    "choices": [{
-                        "index": 0,
-                        "delta": {},
-                        "finish_reason": "stop",
-                    }],
-                }
-                yield f"data: {json.dumps(stop_chunk)}\n\n"
-                yield "data: [DONE]\n\n"
+            # Emit final stop chunk (outside the client context, after streaming done)
+            stop_chunk = {
+                "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
+                "object": "chat.completion.chunk",
+                "model": model,
+                "choices": [{
+                    "index": 0,
+                    "delta": {},
+                    "finish_reason": "stop",
+                }],
+            }
+            yield f"data: {json.dumps(stop_chunk)}\n\n"
+            yield "data: [DONE]\n\n"
 
-            return StreamingResponse(iter_sse(), media_type="text/event-stream")
-        else:
-            # Non-streaming response
-            parser = StreamableParser(ENC, role=Role.ASSISTANT)
+        return StreamingResponse(iter_sse(), media_type="text/event-stream")
+    else:
+        # Non-streaming response
+        parser = StreamableParser(ENC, role=Role.ASSISTANT)
 
+        async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream("POST", url, json=llama_req, timeout=None) as resp:
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: "):
@@ -493,10 +495,10 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                     except json.JSONDecodeError:
                         continue
 
-            # Accumulate and return final response
-            acc = HarmonyAccumulated()
-            acc.add_from_parser(parser)
-            return JSONResponse(content=harmony_state_to_openai_final(acc, model))
+        # Accumulate and return final response
+        acc = HarmonyAccumulated()
+        acc.add_from_parser(parser)
+        return JSONResponse(content=harmony_state_to_openai_final(acc, model))
 
 
 @app.post("/v1/chat/completions")
