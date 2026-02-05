@@ -124,8 +124,8 @@ class TestHarmonyToOpenAIConversion:
         content_deltas = [d for d in all_deltas if "content" in d.get("choices", [{}])[0].get("delta", {})]
         assert len(content_deltas) > 0
 
-    def test_tool_call_extraction(self):
-        """Tool calls should be extracted correctly."""
+    def test_tool_call_extraction_non_streaming(self):
+        """Non-streaming: Tool calls should be extracted with complete arguments."""
         parser = StreamableParser(ENC, role=Role.ASSISTANT)
 
         harmony = '<|channel|>commentary to=functions.get_weather<|constrain|>json<|message|>{"location":"NYC"}<|call|>'
@@ -140,6 +140,48 @@ class TestHarmonyToOpenAIConversion:
         fn_name, args = acc.tool_calls[0]
         assert fn_name == "get_weather"
         assert "NYC" in args
+
+    def test_tool_call_streaming_arguments(self):
+        """
+        Regression test: Streaming tool calls should emit arguments incrementally.
+
+        Previously, streaming emitted tool calls with empty arguments because
+        we emitted the header before arguments were streamed. Now we:
+        1. Emit tool call header with empty arguments
+        2. Stream argument deltas as they arrive
+        """
+        parser = StreamableParser(ENC, role=Role.ASSISTANT)
+        state = HarmonySessionState()
+
+        harmony = '<|channel|>commentary to=functions.get_weather<|constrain|>json<|message|>{"location":"NYC"}<|call|>'
+        tokens = ENC.encode(harmony, allowed_special="all")
+
+        all_deltas = []
+        for token in tokens:
+            parser.process(token)
+            deltas = harmony_state_to_openai_deltas(parser, "test-model", state)
+            all_deltas.extend(deltas)
+
+        # Should have at least 2 deltas: header + arguments
+        assert len(all_deltas) >= 2
+
+        # First delta should have tool call header with function name
+        first_delta = all_deltas[0]
+        tool_calls = first_delta["choices"][0]["delta"].get("tool_calls", [])
+        assert len(tool_calls) == 1
+        assert tool_calls[0]["function"]["name"] == "get_weather"
+
+        # Collect all argument fragments
+        all_args = ""
+        for delta in all_deltas:
+            tool_calls = delta["choices"][0]["delta"].get("tool_calls", [])
+            if tool_calls and "function" in tool_calls[0]:
+                args = tool_calls[0]["function"].get("arguments", "")
+                all_args += args
+
+        # Combined arguments should contain the full JSON
+        assert "location" in all_args
+        assert "NYC" in all_args
 
     def test_non_streaming_final_response(self):
         """Non-streaming response should have correct format."""
