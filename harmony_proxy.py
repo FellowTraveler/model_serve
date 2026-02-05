@@ -674,6 +674,27 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
 
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream("POST", url, json=llama_req, timeout=None) as resp:
+                # Handle upstream errors (e.g., context length exceeded)
+                if resp.status_code != 200:
+                    error_body = await resp.aread()
+                    error_text = error_body.decode("utf-8", errors="replace")
+                    logger.error(f"Upstream error {resp.status_code}: {error_text[:500]}")
+
+                    return JSONResponse(
+                        content={
+                            "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
+                            "object": "chat.completion",
+                            "model": model,
+                            "choices": [{
+                                "index": 0,
+                                "message": {"role": "assistant", "content": f"Error from model server: {error_text[:200]}"},
+                                "finish_reason": "stop",
+                            }],
+                            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                        },
+                        status_code=resp.status_code,
+                    )
+
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: "):
                         continue

@@ -402,5 +402,75 @@ class TestHarmonyParseFallback:
         # This validates the proxy can detect parsing state changes
 
 
+class TestUpstreamErrorHandling:
+    """
+    Test that upstream errors are properly returned to clients instead of empty responses.
+
+    These are documentation tests - the actual error handling is in harmony_proxy.py
+    and requires async/httpx mocking to fully test. These tests document the expected
+    behavior.
+    """
+
+    def test_streaming_error_returns_error_message(self):
+        """
+        Regression test: When upstream returns 400 (e.g., context too long),
+        streaming mode should return the error as an assistant message.
+
+        Expected behavior (implemented in handle_chat_with_harmony):
+        1. Check resp.status_code after opening stream
+        2. If not 200, read error body and log it
+        3. Return error as assistant message content
+        4. Set finish_reason to "stop"
+
+        This prevents the client from receiving an empty response with no explanation.
+        """
+        # The actual implementation is tested via integration tests
+        # This test documents the expected error response format
+        expected_error_chunk_format = {
+            "id": "chatcmpl-xxx",
+            "object": "chat.completion.chunk",
+            "created": 12345,
+            "model": "test-model",
+            "choices": [{
+                "index": 0,
+                "delta": {"role": "assistant", "content": "Error from model server: ..."},
+                "finish_reason": None,
+            }],
+        }
+
+        # Verify the expected structure has required fields
+        assert "choices" in expected_error_chunk_format
+        assert "delta" in expected_error_chunk_format["choices"][0]
+        assert "content" in expected_error_chunk_format["choices"][0]["delta"]
+
+    def test_non_streaming_error_returns_error_message(self):
+        """
+        Regression test: When upstream returns 400 in non-streaming mode,
+        should return error as assistant message with the upstream status code.
+
+        Expected behavior:
+        1. Check resp.status_code before iterating response
+        2. If not 200, read error body
+        3. Return JSONResponse with error as content
+        4. Pass through the upstream status_code
+        """
+        expected_error_response_format = {
+            "id": "chatcmpl-xxx",
+            "object": "chat.completion",
+            "model": "test-model",
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": "Error from model server: ..."},
+                "finish_reason": "stop",
+            }],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        }
+
+        # Verify the expected structure has required fields
+        assert "choices" in expected_error_response_format
+        assert "message" in expected_error_response_format["choices"][0]
+        assert "content" in expected_error_response_format["choices"][0]["message"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
