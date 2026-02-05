@@ -794,6 +794,10 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
             "raw": True,  # Disable Ollama's chat templating
             "options": {
                 "stop": [],  # Clear default Harmony stop tokens so we get full output
+                # Repeat penalty helps prevent GPT-OSS from repeating Harmony tokens
+                # inappropriately (e.g., <|channel|> appearing in wrong places)
+                "repeat_penalty": 1.1,
+                "repeat_last_n": 64,  # Look back 64 tokens for repetition
             },
         }
         # Ollama uses different parameter names
@@ -801,6 +805,9 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
             backend_req["options"]["num_predict"] = body["max_tokens"]
         if "temperature" in body:
             backend_req["options"]["temperature"] = body["temperature"]
+        # Allow client to override repeat_penalty if needed
+        if "repeat_penalty" in body:
+            backend_req["options"]["repeat_penalty"] = body["repeat_penalty"]
         url = f"{OLLAMA_BASE}/api/generate"
         logger.info(f"Routing MXFP4 model {model} -> {ollama_model} to Ollama: {url}")
     else:
