@@ -154,6 +154,41 @@ class TestHarmonyToOpenAIConversion:
         assert response["choices"][0]["finish_reason"] == "tool_calls"
         assert len(response["choices"][0]["message"]["tool_calls"]) == 1
 
+    def test_missing_trailing_end_token(self):
+        """
+        Regression test: Model output without trailing <|end|> should still parse correctly
+        after manually adding the end token.
+
+        GPT-OSS models often output Harmony like:
+        <|start|>assistant<|channel|>analysis<|message|>thinking<|end|><|start|>assistant<|channel|>final<|message|>Hello
+
+        Note: No trailing <|end|> after "Hello". We must add it to finalize parsing.
+        """
+        parser = StreamableParser(ENC, role=Role.ASSISTANT)
+
+        # Simulate model output WITHOUT trailing <|end|>
+        harmony_without_end = "<|start|>assistant<|channel|>analysis<|message|>thinking<|end|><|start|>assistant<|channel|>final<|message|>Hello"
+        tokens = ENC.encode(harmony_without_end, allowed_special="all")
+        for token in tokens:
+            parser.process(token)
+
+        # Before finalization: final message is incomplete
+        acc_before = HarmonyAccumulated()
+        acc_before.add_from_parser(parser)
+        # The final content might be empty or incomplete here
+
+        # Now add the missing <|end|> token to finalize
+        end_tokens = ENC.encode("<|end|>", allowed_special="all")
+        for token in end_tokens:
+            parser.process(token)
+
+        # After finalization: final message should be complete
+        acc_after = HarmonyAccumulated()
+        acc_after.add_from_parser(parser)
+
+        assert len(acc_after.final_content) == 1
+        assert acc_after.final_content[0] == "Hello"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
