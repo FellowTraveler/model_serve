@@ -48,7 +48,8 @@ LLAMA_SWAP_BASE = os.environ.get("LLAMA_SWAP_BASE", f"http://127.0.0.1:{LLAMA_SW
 # Load Harmony models list from config
 # Model names must match llama-swap config.yaml exactly
 def load_harmony_models():
-    config_path = os.path.join(os.path.dirname(__file__), "harmony_models.yaml")
+    default_config = os.path.join(os.path.dirname(__file__), "harmony_models.yaml")
+    config_path = os.environ.get("HARMONY_MODELS_CONFIG", default_config)
     try:
         with open(config_path) as f:
             cfg = yaml.safe_load(f)
