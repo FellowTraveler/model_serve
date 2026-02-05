@@ -216,11 +216,12 @@ def render_harmony_prompt(convo: Conversation) -> str:
 
 class HarmonySessionState:
     """
-    Track streaming state to avoid duplicate tool call emissions.
+    Track streaming state to avoid duplicate emissions.
     Reset when channel/recipient changes (new message).
     """
     def __init__(self):
         self.emitted_tool_call_for_message = False
+        self.emitted_role = False  # Only emit role in first content delta
         self.current_tool_call_id = None
         self.last_channel = None
         self.last_recipient = None
@@ -231,6 +232,7 @@ class HarmonySessionState:
             self.last_channel = channel
             self.last_recipient = recipient
             self.emitted_tool_call_for_message = False
+            self.emitted_role = False
             self.current_tool_call_id = None
             return True
         return False
@@ -316,16 +318,19 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
 
     # Final channel: user-visible assistant content
     if channel == "final" and delta_text:
+        # Build delta - only include role in first chunk (OpenAI spec)
+        delta_content = {"content": delta_text}
+        if not state.emitted_role:
+            delta_content["role"] = "assistant"
+            state.emitted_role = True
+
         delta = {
             "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
             "object": "chat.completion.chunk",
             "model": model,
             "choices": [{
                 "index": 0,
-                "delta": {
-                    "role": "assistant",
-                    "content": delta_text,
-                },
+                "delta": delta_content,
                 "finish_reason": None,
             }],
         }
