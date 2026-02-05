@@ -433,6 +433,8 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
         async def iter_sse():
             parser = StreamableParser(ENC, role=Role.ASSISTANT)
             state = HarmonySessionState()
+            harmony_parse_failed = False
+            chunk_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
 
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream("POST", url, json=llama_req, timeout=None) as resp:
@@ -447,19 +449,40 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                             chunk = json.loads(data)
                             content = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
                             if content:
-                                # Encode content to tokens and process
-                                tokens = ENC.encode(content, allowed_special='all')
-                                for token in tokens:
-                                    parser.process(token)
-                                    deltas = harmony_state_to_openai_deltas(parser, model, state)
-                                    for delta in deltas:
-                                        yield f"data: {json.dumps(delta)}\n\n"
+                                if harmony_parse_failed:
+                                    # After parse failure, stream raw content
+                                    raw_chunk = {
+                                        "id": chunk_id,
+                                        "object": "chat.completion.chunk",
+                                        "model": model,
+                                        "choices": [{"index": 0, "delta": {"content": content}}],
+                                    }
+                                    yield f"data: {json.dumps(raw_chunk)}\n\n"
+                                else:
+                                    try:
+                                        tokens = ENC.encode(content, allowed_special='all')
+                                        for token in tokens:
+                                            parser.process(token)
+                                            deltas = harmony_state_to_openai_deltas(parser, model, state)
+                                            for delta in deltas:
+                                                yield f"data: {json.dumps(delta)}\n\n"
+                                    except Exception as e:
+                                        logger.warning(f"Harmony parse error in stream, falling back to raw: {e}")
+                                        harmony_parse_failed = True
+                                        # Yield current content as raw
+                                        raw_chunk = {
+                                            "id": chunk_id,
+                                            "object": "chat.completion.chunk",
+                                            "model": model,
+                                            "choices": [{"index": 0, "delta": {"content": content}}],
+                                        }
+                                        yield f"data: {json.dumps(raw_chunk)}\n\n"
                         except json.JSONDecodeError:
                             continue
 
-            # Emit final stop chunk (outside the client context, after streaming done)
+            # Emit final stop chunk
             stop_chunk = {
-                "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
+                "id": chunk_id,
                 "object": "chat.completion.chunk",
                 "model": model,
                 "choices": [{
@@ -475,6 +498,8 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
     else:
         # Non-streaming response
         parser = StreamableParser(ENC, role=Role.ASSISTANT)
+        raw_content = []  # Fallback if Harmony parsing fails
+        harmony_parse_failed = False
 
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream("POST", url, json=llama_req, timeout=None) as resp:
@@ -489,11 +514,31 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                         chunk = json.loads(data)
                         content = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
                         if content:
-                            tokens = ENC.encode(content, allowed_special='all')
-                            for token in tokens:
-                                parser.process(token)
+                            raw_content.append(content)
+                            if not harmony_parse_failed:
+                                try:
+                                    tokens = ENC.encode(content, allowed_special='all')
+                                    for token in tokens:
+                                        parser.process(token)
+                                except Exception as e:
+                                    logger.warning(f"Harmony parse error, falling back to raw: {e}")
+                                    harmony_parse_failed = True
                     except json.JSONDecodeError:
                         continue
+
+        if harmony_parse_failed:
+            # Return raw content as plain response
+            return JSONResponse(content={
+                "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
+                "object": "chat.completion",
+                "model": model,
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "".join(raw_content)},
+                    "finish_reason": "stop",
+                }],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            })
 
         # Accumulate and return final response
         acc = HarmonyAccumulated()
