@@ -413,6 +413,9 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
     convo = build_conversation(body)
     harmony_prompt = render_harmony_prompt(convo)
 
+    # Debug: log the Harmony prompt (first 500 chars)
+    logger.debug(f"Harmony prompt (first 500 chars): {harmony_prompt[:500]}")
+
     # Build request for llama-swap (send Harmony as user message)
     llama_req = {
         "model": model,
@@ -468,6 +471,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                                                 yield f"data: {json.dumps(delta)}\n\n"
                                     except Exception as e:
                                         logger.warning(f"Harmony parse error in stream, falling back to raw: {e}")
+                                        logger.debug(f"Raw content that failed Harmony parse: {content[:200]}")
                                         harmony_parse_failed = True
                                         # Yield current content as raw
                                         raw_chunk = {
@@ -479,6 +483,18 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                                         yield f"data: {json.dumps(raw_chunk)}\n\n"
                         except json.JSONDecodeError:
                             continue
+
+            # Finalize parsing by sending <|end|> if we're still in Harmony mode
+            if not harmony_parse_failed:
+                try:
+                    tokens = ENC.encode("<|end|>", allowed_special='all')
+                    for token in tokens:
+                        parser.process(token)
+                        deltas = harmony_state_to_openai_deltas(parser, model, state)
+                        for delta in deltas:
+                            yield f"data: {json.dumps(delta)}\n\n"
+                except Exception:
+                    pass  # Ignore finalization errors in streaming
 
             # Emit final stop chunk
             stop_chunk = {
@@ -540,9 +556,26 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                 "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
             })
 
+        # Finalize parsing by adding <|end|> if content doesn't end with it
+        raw_text = "".join(raw_content)
+        if raw_text and not raw_text.rstrip().endswith("<|end|>"):
+            try:
+                tokens = ENC.encode("<|end|>", allowed_special='all')
+                for token in tokens:
+                    parser.process(token)
+            except Exception as e:
+                logger.warning(f"Failed to finalize Harmony parsing: {e}")
+
+        # Log what we actually received and parsed
+        logger.info(f"Raw content received: {len(raw_text)} chars, first 200: {raw_text[:200]}")
+        logger.info(f"Parser messages count: {len(parser.messages)}")
+        for i, msg in enumerate(parser.messages):
+            logger.info(f"Parser message {i}: channel={getattr(msg, 'channel', None)}, recipient={getattr(msg, 'recipient', None)}")
+
         # Accumulate and return final response
         acc = HarmonyAccumulated()
         acc.add_from_parser(parser)
+        logger.info(f"Accumulated: final_content={len(acc.final_content)}, tool_calls={len(acc.tool_calls)}")
         return JSONResponse(content=harmony_state_to_openai_final(acc, model))
 
 
