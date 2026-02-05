@@ -201,9 +201,13 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
             if custom is None:
                 pass
             else:
-                # Add --jinja flag if specified (server flag, not sampler)
-                if custom.get('jinja', False):
-                    cmd = f"{cmd} --jinja"
+                # Handle jinja flag (server flag, not sampler)
+                # llama-server defaults to --jinja enabled, so we need --no-jinja to disable
+                if 'jinja' in custom:
+                    if custom['jinja']:
+                        cmd = f"{cmd} --jinja"
+                    else:
+                        cmd = f"{cmd} --no-jinja"
 
                 # Allow custom sampler args to be appended
                 if 'sampler_args' in custom:
@@ -253,9 +257,13 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
 
             cmd = f"llama-server --host 127.0.0.1 --port ${{PORT}} --model {symlink_path} --ctx-size {ctx_size} --parallel {parallel} --metrics"
 
-            # Add --jinja flag if specified (server flag, not sampler)
-            if custom.get('jinja', False):
-                cmd = f"{cmd} --jinja"
+            # Handle jinja flag (server flag, not sampler)
+            # llama-server defaults to --jinja enabled, so we need --no-jinja to disable
+            if 'jinja' in custom:
+                if custom['jinja']:
+                    cmd = f"{cmd} --jinja"
+                else:
+                    cmd = f"{cmd} --no-jinja"
 
             if 'sampler_args' in custom:
                 cmd = f"{cmd} {custom['sampler_args']}"

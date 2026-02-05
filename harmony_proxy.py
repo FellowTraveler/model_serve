@@ -13,6 +13,8 @@ import uuid
 import logging
 import yaml
 import httpx
+from datetime import datetime
+from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
@@ -66,6 +68,30 @@ ENC = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
 # FastAPI app
 app = FastAPI(title="Harmony Proxy", description="OpenAI/Anthropic proxy with Harmony support")
 
+# Request logging directory
+REQUEST_LOG_DIR = Path(os.path.dirname(__file__)) / "request_logs"
+REQUEST_LOG_DIR.mkdir(exist_ok=True)
+
+
+def log_request(endpoint: str, body: dict, source: str = "unknown"):
+    """Log incoming request to file for debugging."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    model = body.get("model", "unknown")
+    log_file = REQUEST_LOG_DIR / f"{timestamp}_{model.replace('/', '_')}_{endpoint.replace('/', '_')}.json"
+
+    log_data = {
+        "timestamp": datetime.now().isoformat(),
+        "endpoint": endpoint,
+        "source": source,
+        "body": body,
+    }
+
+    with open(log_file, "w") as f:
+        json.dump(log_data, f, indent=2)
+
+    logger.info(f"Logged request to {log_file}")
+    return log_file
+
 
 def is_harmony_model(model: str) -> bool:
     """Check if model requires Harmony encoding (O(1) lookup)."""
@@ -83,16 +109,52 @@ def openai_messages_to_harmony(messages: list) -> list:
     Role mapping:
     - system -> Role.SYSTEM
     - user -> Role.USER
-    - assistant -> Role.ASSISTANT
+    - assistant -> Role.ASSISTANT (with tool_calls -> commentary channel)
     - developer -> Role.DEVELOPER
-    - tool -> handled separately for multi-turn support
+    - tool -> Role.TOOL (with tool name from tool_call_id mapping)
     """
     harmony_messages = []
+
+    # Track tool_call_id -> tool_name mapping for tool results
+    tool_call_id_to_name = {}
+
     for m in messages:
         role_str = m.get("role", "")
         content = m.get("content", "")
+        tool_calls = m.get("tool_calls", [])
+        tool_call_id = m.get("tool_call_id")
 
-        # Map OpenAI role string to Harmony Role enum
+        # Handle assistant messages with tool calls
+        if role_str == "assistant" and tool_calls:
+            for tc in tool_calls:
+                tc_id = tc.get("id", "")
+                func = tc.get("function", {})
+                fn_name = func.get("name", "")
+                fn_args = func.get("arguments", "{}")
+
+                # Track mapping for later tool results
+                tool_call_id_to_name[tc_id] = fn_name
+
+                # Create Harmony message for tool call
+                harmony_messages.append(Message(
+                    author=Author(role=Role.ASSISTANT),
+                    channel="commentary",
+                    recipient=f"functions.{fn_name}",
+                    content=[TextContent(text=fn_args)],
+                ))
+            continue
+
+        # Handle tool result messages
+        if role_str == "tool":
+            # Get tool name from the mapping
+            tool_name = tool_call_id_to_name.get(tool_call_id, "unknown_tool")
+            harmony_messages.append(Message(
+                author=Author(role=Role.TOOL, name=tool_name),
+                content=[TextContent(text=content)] if content else [],
+            ))
+            continue
+
+        # Map standard OpenAI role string to Harmony Role enum
         role_map = {
             "system": Role.SYSTEM,
             "user": Role.USER,
@@ -102,7 +164,7 @@ def openai_messages_to_harmony(messages: list) -> list:
 
         role = role_map.get(role_str)
         if role is None:
-            # Skip unknown roles (e.g., tool messages for now)
+            logger.warning(f"Unknown role '{role_str}' in message, skipping")
             continue
 
         harmony_messages.append(Message(
@@ -147,56 +209,45 @@ def build_conversation(body: dict) -> Conversation:
     openai_messages = body.get("messages", [])
     tools = openai_tools_to_harmony(body.get("tools", []))
 
-    harmony_messages = []
+    # First, convert all messages using openai_messages_to_harmony
+    # This properly handles tool calls and tool results
+    harmony_messages = openai_messages_to_harmony(openai_messages)
 
-    # Check if there's already a system message
-    has_system = any(m.get("role") == "system" for m in openai_messages)
-
-    # If we have tools, we need a system message with tool definitions
+    # If we have tools, we need to replace the system message with one that includes tool definitions
     if tools:
         tool_namespace = ToolNamespaceConfig(
             name="functions",
             description="Available functions",
             tools=tools,
         )
+
+        # Find existing system message and replace it, or add new one
+        system_idx = None
+        system_text = ""
+        for i, msg in enumerate(harmony_messages):
+            if msg.author.role == Role.SYSTEM:
+                system_idx = i
+                # Extract text from existing system content
+                for c in msg.content:
+                    if isinstance(c, TextContent):
+                        system_text = c.text
+                        break
+                break
+
+        # Create system message with tools
         system_content = SystemContent(
-            model_identity=None,  # Use default or extract from system message
+            model_identity=system_text,
             tools={"functions": tool_namespace},
         )
+        system_message = Message(
+            author=Author(role=Role.SYSTEM),
+            content=[system_content],
+        )
 
-        # Find and merge with existing system message, or create new one
-        for m in openai_messages:
-            if m.get("role") == "system":
-                # Merge system message content into model_identity
-                system_content = SystemContent(
-                    model_identity=m.get("content", ""),
-                    tools={"functions": tool_namespace},
-                )
-                harmony_messages.append(Message(
-                    author=Author(role=Role.SYSTEM),
-                    content=[system_content],
-                ))
-            elif m.get("role") in ("user", "assistant", "developer"):
-                role_map = {
-                    "user": Role.USER,
-                    "assistant": Role.ASSISTANT,
-                    "developer": Role.DEVELOPER,
-                }
-                content = m.get("content", "")
-                harmony_messages.append(Message(
-                    author=Author(role=role_map[m["role"]]),
-                    content=[TextContent(text=content)] if content else [],
-                ))
-
-        # If no system message existed, prepend one with tools
-        if not has_system:
-            harmony_messages.insert(0, Message(
-                author=Author(role=Role.SYSTEM),
-                content=[system_content],
-            ))
-    else:
-        # No tools - use simple conversion
-        harmony_messages = openai_messages_to_harmony(openai_messages)
+        if system_idx is not None:
+            harmony_messages[system_idx] = system_message
+        else:
+            harmony_messages.insert(0, system_message)
 
     return Conversation(messages=harmony_messages)
 
@@ -225,6 +276,7 @@ class HarmonySessionState:
         self.current_tool_call_id = None
         self.last_channel = None
         self.last_recipient = None
+        self.has_tool_calls = False  # Track if ANY tool calls were made (for finish_reason)
 
     def check_and_update(self, channel: str, recipient: str) -> bool:
         """Check if state changed and update. Returns True if new message started."""
@@ -268,6 +320,7 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
         if not state.emitted_tool_call_for_message:
             # First chunk: emit tool call header with function name
             state.emitted_tool_call_for_message = True
+            state.has_tool_calls = True  # Track for finish_reason
             state.current_tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
 
             delta = {
@@ -438,10 +491,18 @@ async def proxy_openai_endpoint(path: str, body: dict, stream: bool):
     if stream:
         # Client must be created inside the generator to avoid closing before iteration
         async def iter_stream():
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            model = body.get("model", "unknown").replace("/", "_")
+            response_log = REQUEST_LOG_DIR / f"{timestamp}_{model}_response.jsonl"
+
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream("POST", url, json=body, timeout=None) as resp:
-                    async for chunk in resp.aiter_raw():
-                        yield chunk
+                    with open(response_log, "w") as f:
+                        async for chunk in resp.aiter_raw():
+                            # Log raw chunk
+                            f.write(chunk.decode("utf-8", errors="replace"))
+                            yield chunk
+                    logger.info(f"Logged streaming response to {response_log}")
         return StreamingResponse(iter_stream(), media_type="text/event-stream")
     else:
         async with httpx.AsyncClient(timeout=None) as client:
@@ -463,10 +524,11 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
     # Debug: log the Harmony prompt (first 500 chars)
     logger.debug(f"Harmony prompt (first 500 chars): {harmony_prompt[:500]}")
 
-    # Build request for llama-swap (send Harmony as user message)
+    # Build request for llama-swap using /v1/completions endpoint
+    # We must use completions (not chat) to send raw Harmony prompt without templating
     llama_req = {
         "model": model,
-        "messages": [{"role": "user", "content": harmony_prompt}],
+        "prompt": harmony_prompt,
         "stream": True,  # Always stream from upstream
     }
 
@@ -475,7 +537,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
         if key in body:
             llama_req[key] = body[key]
 
-    url = f"{LLAMA_SWAP_BASE}/v1/chat/completions"
+    url = f"{LLAMA_SWAP_BASE}/v1/completions"
 
     if stream:
         # Streaming response - client must be created inside generator
@@ -499,7 +561,8 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
 
                         try:
                             chunk = json.loads(data)
-                            content = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                            # completions endpoint uses 'text', not 'delta.content'
+                            content = chunk.get("choices", [{}])[0].get("text", "")
                             if content:
                                 if harmony_parse_failed:
                                     # After parse failure, stream raw content
@@ -545,7 +608,8 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                 except Exception:
                     pass  # Ignore finalization errors in streaming
 
-            # Emit final stop chunk
+            # Emit final chunk with appropriate finish_reason
+            finish_reason = "tool_calls" if state.has_tool_calls else "stop"
             stop_chunk = {
                 "id": chunk_id,
                 "object": "chat.completion.chunk",
@@ -554,7 +618,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                 "choices": [{
                     "index": 0,
                     "delta": {},
-                    "finish_reason": "stop",
+                    "finish_reason": finish_reason,
                 }],
             }
             yield f"data: {json.dumps(stop_chunk)}\n\n"
@@ -578,7 +642,8 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
 
                     try:
                         chunk = json.loads(data)
-                        content = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                        # completions endpoint uses 'text', not 'delta.content'
+                        content = chunk.get("choices", [{}])[0].get("text", "")
                         if content:
                             raw_content.append(content)
                             if not harmony_parse_failed:
@@ -646,10 +711,19 @@ async def chat_completions(request: Request):
     model = body.get("model", "")
     stream = body.get("stream", False)
 
+    # Log request for debugging
+    user_agent = request.headers.get("user-agent", "unknown")
+    log_request("/v1/chat/completions", body, source=user_agent)
+
     logger.info(f"Chat completion request: model={model}, stream={stream}, harmony={is_harmony_model(model)}")
 
-    # Pass through to llama-swap - it handles Harmony via Jinja templates
-    return await proxy_openai_endpoint("/v1/chat/completions", body, stream)
+    # Route based on model type
+    if is_harmony_model(model):
+        # GPT-OSS models: use Harmony encoding/decoding (llama-server runs with --no-jinja)
+        return await handle_chat_with_harmony(body, stream)
+    else:
+        # Other models: passthrough to llama-swap
+        return await proxy_openai_endpoint("/v1/chat/completions", body, stream)
 
 
 # ============================================================================

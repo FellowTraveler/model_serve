@@ -87,6 +87,39 @@ class TestOpenAIToHarmonyConversion:
         assert "<|message|>" in prompt
         assert "Hello" in prompt
 
+    def test_tool_call_and_result_conversion(self):
+        """
+        Regression test: Tool calls and results must be properly converted to Harmony format.
+
+        This ensures multi-turn tool usage works correctly:
+        1. Assistant tool calls use commentary channel with functions.X recipient
+        2. Tool results use Role.TOOL with the tool name
+        """
+        body = {
+            "messages": [
+                {"role": "system", "content": "You are helpful."},
+                {"role": "user", "content": "What time is it?"},
+                {"role": "assistant", "tool_calls": [
+                    {"id": "call_123", "type": "function", "function": {"name": "get_time", "arguments": "{}"}}
+                ]},
+                {"role": "tool", "tool_call_id": "call_123", "content": "3:00 PM"},
+            ],
+            "tools": [{"type": "function", "function": {"name": "get_time", "description": "Get time"}}],
+        }
+        convo = build_conversation(body)
+        prompt = render_harmony_prompt(convo)
+
+        # Verify tool call is rendered with commentary channel
+        assert "to=functions.get_time" in prompt
+        assert "<|channel|>commentary" in prompt
+        assert "<|call|>" in prompt
+
+        # Verify tool result is rendered
+        assert "<|start|>get_time<|message|>3:00 PM" in prompt
+
+        # Verify prompt ends ready for assistant
+        assert prompt.endswith("<|start|>assistant")
+
 
 class TestHarmonyToOpenAIConversion:
     """Test Harmony to OpenAI format conversion."""
@@ -198,6 +231,37 @@ class TestHarmonyToOpenAIConversion:
         # Combined arguments should contain the full JSON
         assert "location" in all_args
         assert "NYC" in all_args
+
+    def test_streaming_tool_call_sets_has_tool_calls_flag(self):
+        """
+        Regression test: Streaming tool calls must set has_tool_calls flag for finish_reason.
+
+        When a model makes tool calls in streaming mode, the final chunk must have
+        finish_reason="tool_calls" (not "stop"), otherwise the client won't continue
+        the conversation with tool results.
+
+        This test verifies that the state.has_tool_calls flag is set when emitting tool calls.
+        """
+        parser = StreamableParser(ENC, role=Role.ASSISTANT)
+        state = HarmonySessionState()
+        chunk_id = "chatcmpl-test123"
+        created = 1234567890
+
+        # Initially, has_tool_calls should be False
+        assert state.has_tool_calls is False
+
+        harmony = '<|channel|>commentary to=functions.get_weather<|constrain|>json<|message|>{"location":"NYC"}<|call|>'
+        tokens = ENC.encode(harmony, allowed_special="all")
+
+        for token in tokens:
+            parser.process(token)
+            harmony_state_to_openai_deltas(parser, "test-model", state, chunk_id, created)
+
+        # After processing tool call, has_tool_calls should be True
+        assert state.has_tool_calls is True
+
+        # This flag should be used for finish_reason in the final chunk:
+        # finish_reason = "tool_calls" if state.has_tool_calls else "stop"
 
     def test_non_streaming_final_response(self):
         """Non-streaming response should have correct format."""

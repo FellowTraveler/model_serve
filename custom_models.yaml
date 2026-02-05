@@ -22,17 +22,20 @@ models:
   # ============================================================================
 
   # --- GPT-OSS Derestricted models (supports 128k context) ---
-  # NOTE: GPT-OSS uses Harmony format which llama-server doesn't parse for tools.
-  # Use for reasoning/chat only, NOT for tool-calling tasks. No --jinja needed.
+  # NOTE: GPT-OSS uses Harmony format. We disable jinja so llama-server outputs
+  # raw Harmony tokens, then our harmony_proxy handles the encoding/decoding.
   gpt-oss-120b-derestricted-gguf-117b-latest:
     sampler_args: "--temp 0.7 --top-p 0.95 --top-k 40"
     ctx_size: 65536
+    jinja: false
   gpt-oss-20b-derestricted-gguf-20.9b-q8_0:
     sampler_args: "--temp 0.7 --top-p 0.95 --top-k 40"
     ctx_size: 65536
+    jinja: false
   gpt-oss-20b-gguf-20.9b-q8_k_xl:
     sampler_args: "--temp 0.7 --top-p 0.95 --top-k 40"
     ctx_size: 65536
+    jinja: false
 
   # --- Gemma models (supports 32k context) ---
   # Per Unsloth/Google: temp 1.0, top-p 0.95, top-k 64 (no min-p/top-nsigma)
