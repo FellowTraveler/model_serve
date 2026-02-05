@@ -41,7 +41,9 @@ from openai_harmony import (
 )
 
 # Configuration
-LLAMA_SWAP_BASE = os.environ.get("LLAMA_SWAP_BASE", "http://127.0.0.1:8000")
+# Construct LLAMA_SWAP_BASE from port, consistent with .env
+LLAMA_SWAP_PORT = os.environ.get("LLAMA_SWAP_PORT", "5847")
+LLAMA_SWAP_BASE = os.environ.get("LLAMA_SWAP_BASE", f"http://127.0.0.1:{LLAMA_SWAP_PORT}")
 
 # Load Harmony models list from config
 # Model names must match llama-swap config.yaml exactly
