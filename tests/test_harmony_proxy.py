@@ -7,6 +7,7 @@ from harmony_proxy import (
     is_harmony_model,
     is_mxfp4_model,
     get_ollama_model_name,
+    sanitize_tool_arguments,
     openai_messages_to_harmony,
     openai_tools_to_harmony,
     build_conversation,
@@ -60,6 +61,52 @@ class TestModelRouting:
         # Unknown model returns original
         mapped = get_ollama_model_name("ms/some-unknown-model")
         assert mapped == "ms/some-unknown-model"
+
+
+class TestToolArgumentSanitization:
+    """Test tool argument sanitization for GPT-OSS hallucination fix."""
+
+    def test_valid_json_unchanged(self):
+        """Valid JSON should be returned unchanged."""
+        valid = '{"command": "ls -la"}'
+        assert sanitize_tool_arguments(valid) == valid
+
+    def test_concatenated_json_extracts_first(self):
+        """Concatenated JSON objects should extract only the first."""
+        # This is the hallucination pattern from GPT-OSS
+        hallucinated = '{"command":"ls"}{"stdout":"file1\\nfile2"}{"command":"cat file1"}'
+        result = sanitize_tool_arguments(hallucinated)
+        assert result == '{"command":"ls"}'
+
+    def test_nested_json_preserved(self):
+        """Nested JSON should be fully preserved."""
+        nested = '{"config": {"host": "localhost", "port": 8080}}'
+        assert sanitize_tool_arguments(nested) == nested
+
+    def test_json_with_string_braces(self):
+        """Braces inside strings should not affect parsing."""
+        with_braces = '{"text": "Use {curly} braces"}'
+        assert sanitize_tool_arguments(with_braces) == with_braces
+
+    def test_empty_returns_empty(self):
+        """Empty string should return empty."""
+        assert sanitize_tool_arguments("") == ""
+        assert sanitize_tool_arguments("  ") == "  "
+
+    def test_complex_hallucination_pattern(self):
+        """
+        Regression test: Real GPT-OSS hallucination pattern.
+
+        The model generates tool call + fake response + more tool calls.
+        """
+        hallucinated = (
+            '{"command":"python3 /path/to/script.py"}'
+            '{"stdout":"Done. Created file.md\\n"}'
+            '{"path":"file.md","command":"view"}'
+            '{"stdout":"# Content\\n"}'
+        )
+        result = sanitize_tool_arguments(hallucinated)
+        assert result == '{"command":"python3 /path/to/script.py"}'
 
 
 class TestOpenAIToHarmonyConversion:

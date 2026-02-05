@@ -56,6 +56,73 @@ def is_mxfp4_model(model: str) -> bool:
     """Check if model requires MXFP4 quantization (route to Ollama)."""
     return "mxfp4" in model.lower()
 
+
+def sanitize_tool_arguments(args: str) -> str:
+    """
+    Clean tool call arguments to handle GPT-OSS hallucination behavior.
+
+    GPT-OSS models sometimes hallucinate entire tool call/response sequences
+    in a single arguments field, producing concatenated JSON like:
+    {"command":"ls"}{"stdout":"file1\\nfile2"}{"command":"cat file1"}...
+
+    This function extracts only the first valid JSON object.
+    """
+    if not args or not args.strip():
+        return args
+
+    args = args.strip()
+
+    # Quick check: if it starts with { and is valid JSON as-is, return it
+    if args.startswith('{'):
+        try:
+            json.loads(args)
+            return args  # Valid JSON, return as-is
+        except json.JSONDecodeError:
+            pass
+
+    # Try to extract just the first JSON object
+    if args.startswith('{'):
+        depth = 0
+        in_string = False
+        escape = False
+        end_pos = 0
+
+        for i, c in enumerate(args):
+            if escape:
+                escape = False
+                continue
+            if c == '\\' and in_string:
+                escape = True
+                continue
+            if c == '"' and not escape:
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    end_pos = i + 1
+                    break
+
+        if end_pos > 0:
+            first_obj = args[:end_pos]
+            try:
+                json.loads(first_obj)
+                # Check if there was more content after (hallucinated responses)
+                remaining = args[end_pos:].strip()
+                if remaining:
+                    logger.warning(f"Truncated hallucinated tool response: {len(remaining)} chars after first JSON object")
+                return first_obj
+            except json.JSONDecodeError:
+                pass
+
+    # Couldn't extract valid JSON, return original (will likely fail downstream)
+    logger.warning(f"Could not sanitize tool arguments: {args[:100]}...")
+    return args
+
 # Load Harmony models list from config
 # Model names must match llama-swap config.yaml exactly
 def load_harmony_models():
@@ -337,6 +404,11 @@ class HarmonySessionState:
         self.has_tool_calls = False  # Track if ANY tool calls were made (for finish_reason)
         self.has_real_content = False  # Track if we emitted commentary tool calls or final content
         self.deferred_analysis_tool_calls = []  # Buffer analysis channel tool calls as fallback
+        # JSON depth tracking for argument sanitization (GPT-OSS hallucination fix)
+        self.args_json_depth = 0
+        self.args_in_string = False
+        self.args_escape_next = False
+        self.args_first_object_complete = False
 
     def check_and_update(self, channel: str, recipient: str) -> bool:
         """Check if state changed and update. Returns True if new message started."""
@@ -346,6 +418,11 @@ class HarmonySessionState:
             self.emitted_tool_call_for_message = False
             self.emitted_role = False
             self.current_tool_call_id = None
+            # Reset JSON tracking for new message
+            self.args_json_depth = 0
+            self.args_in_string = False
+            self.args_escape_next = False
+            self.args_first_object_complete = False
             return True
         return False
 
@@ -424,27 +501,66 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
             }
             deltas.append(delta)
 
-        # Stream arguments incrementally
-        if delta_text:
-            delta = {
-                "id": chunk_id,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": model,
-                "choices": [{
-                    "index": 0,
-                    "delta": {
-                        "tool_calls": [{
-                            "index": 0,
-                            "function": {
-                                "arguments": delta_text,
-                            },
-                        }],
-                    },
-                    "finish_reason": None,
-                }],
-            }
-            deltas.append(delta)
+        # Stream arguments incrementally, but stop after first JSON object
+        # This handles GPT-OSS hallucination of tool responses
+        if delta_text and not state.args_first_object_complete:
+            # Filter delta_text to only include up to end of first JSON object
+            filtered_text = []
+            for c in delta_text:
+                if state.args_first_object_complete:
+                    break  # Stop processing once first object is done
+
+                if state.args_escape_next:
+                    state.args_escape_next = False
+                    filtered_text.append(c)
+                    continue
+
+                if c == '\\' and state.args_in_string:
+                    state.args_escape_next = True
+                    filtered_text.append(c)
+                    continue
+
+                if c == '"' and not state.args_escape_next:
+                    state.args_in_string = not state.args_in_string
+                    filtered_text.append(c)
+                    continue
+
+                if not state.args_in_string:
+                    if c == '{':
+                        state.args_json_depth += 1
+                        filtered_text.append(c)
+                    elif c == '}':
+                        state.args_json_depth -= 1
+                        filtered_text.append(c)
+                        if state.args_json_depth == 0:
+                            state.args_first_object_complete = True
+                            logger.info("Streaming args: first JSON object complete, truncating hallucinated content")
+                    else:
+                        filtered_text.append(c)
+                else:
+                    filtered_text.append(c)
+
+            emit_text = ''.join(filtered_text)
+            if emit_text:
+                delta = {
+                    "id": chunk_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {
+                            "tool_calls": [{
+                                "index": 0,
+                                "function": {
+                                    "arguments": emit_text,
+                                },
+                            }],
+                        },
+                        "finish_reason": None,
+                    }],
+                }
+                deltas.append(delta)
 
         return deltas
 
@@ -535,12 +651,14 @@ def harmony_state_to_openai_final(acc: HarmonyAccumulated, model: str) -> dict:
     if effective_tool_calls:
         message["tool_calls"] = []
         for fn_name, args in effective_tool_calls:
+            # Sanitize arguments to handle GPT-OSS hallucination of tool responses
+            clean_args = sanitize_tool_arguments(args)
             message["tool_calls"].append({
                 "id": f"call_{uuid.uuid4().hex[:24]}",
                 "type": "function",
                 "function": {
                     "name": fn_name,
-                    "arguments": args,
+                    "arguments": clean_args,
                 },
             })
         finish_reason = "tool_calls"
@@ -813,8 +931,9 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                     yield f"data: {json.dumps(header_delta)}\n\n"
                     deltas_emitted += 1
 
-                    # Emit arguments
+                    # Emit arguments (sanitized to handle GPT-OSS hallucination)
                     if deferred["arguments"]:
+                        clean_args = sanitize_tool_arguments(deferred["arguments"])
                         args_delta = {
                             "id": chunk_id,
                             "object": "chat.completion.chunk",
@@ -826,7 +945,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                                     "tool_calls": [{
                                         "index": 0,
                                         "function": {
-                                            "arguments": deferred["arguments"],
+                                            "arguments": clean_args,
                                         },
                                     }],
                                 },
