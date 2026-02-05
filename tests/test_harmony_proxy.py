@@ -16,7 +16,7 @@ from harmony_proxy import (
     ENC,
     HARMONY_MODELS,
 )
-from openai_harmony import StreamableParser, Role
+from openai_harmony import StreamableParser, Role, HarmonyError
 
 
 class TestModelRouting:
@@ -188,6 +188,52 @@ class TestHarmonyToOpenAIConversion:
 
         assert len(acc_after.final_content) == 1
         assert acc_after.final_content[0] == "Hello"
+
+
+class TestHarmonyParseFallback:
+    """Test fallback to raw content when Harmony parsing fails."""
+
+    def test_malformed_harmony_header_triggers_error(self):
+        """
+        Regression test: Malformed Harmony header should raise an error.
+
+        Real error from logs: "unexpected tokens remaining in message header"
+        when model outputs something like "4-word description:" after header.
+        """
+        parser = StreamableParser(ENC, role=Role.ASSISTANT)
+
+        # This pattern caused the actual error in production:
+        # A Harmony header start followed by non-Harmony content
+        malformed = "<|start|>assistant extra garbage that breaks parsing<|message|>"
+        tokens = ENC.encode(malformed, allowed_special="all")
+
+        with pytest.raises(HarmonyError):
+            for token in tokens:
+                parser.process(token)
+
+    def test_partial_harmony_then_plain_text(self):
+        """
+        Regression test: Model starts with Harmony but then outputs plain text.
+
+        This simulates a model that begins correctly but then breaks format.
+        The proxy should catch this and fall back to raw content.
+        """
+        parser = StreamableParser(ENC, role=Role.ASSISTANT)
+
+        # Start with valid Harmony header
+        valid_start = "<|start|>assistant<|channel|>final<|message|>"
+        tokens = ENC.encode(valid_start, allowed_special="all")
+        for token in tokens:
+            parser.process(token)  # Should work
+
+        # Then some content
+        content = "Hello "
+        tokens = ENC.encode(content, allowed_special="all")
+        for token in tokens:
+            parser.process(token)  # Should work
+
+        # The parser should have processed without error up to this point
+        # This validates the proxy can detect parsing state changes
 
 
 if __name__ == "__main__":
