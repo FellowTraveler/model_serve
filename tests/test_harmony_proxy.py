@@ -8,6 +8,7 @@ from harmony_proxy import (
     is_mxfp4_model,
     get_ollama_model_name,
     sanitize_tool_arguments,
+    sanitize_function_name,
     openai_messages_to_harmony,
     openai_tools_to_harmony,
     build_conversation,
@@ -107,6 +108,44 @@ class TestToolArgumentSanitization:
         )
         result = sanitize_tool_arguments(hallucinated)
         assert result == '{"command":"python3 /path/to/script.py"}'
+
+
+class TestFunctionNameSanitization:
+    """Test function name sanitization for GPT-OSS malformed recipient fix."""
+
+    def test_clean_name_unchanged(self):
+        """Clean function names should be returned unchanged."""
+        assert sanitize_function_name("developer__shell") == "developer__shell"
+        assert sanitize_function_name("get_weather") == "get_weather"
+
+    def test_removes_channel_token(self):
+        """
+        Regression test: Function names with <|channel|> should be sanitized.
+
+        This happens when GPT-OSS outputs malformed Harmony where the recipient
+        field contains raw Harmony tokens.
+        """
+        # The actual bug pattern from logs
+        dirty = "text_editor<|channel|>commentary"
+        assert sanitize_function_name(dirty) == "text_editor"
+
+        dirty = "developer__shell<|channel|>analysis"
+        assert sanitize_function_name(dirty) == "developer__shell"
+
+    def test_removes_message_token(self):
+        """Function names with <|message|> should be sanitized."""
+        dirty = "shell<|message|>some text"
+        assert sanitize_function_name(dirty) == "shell"
+
+    def test_removes_multiple_tokens(self):
+        """Multiple Harmony tokens should all be removed."""
+        dirty = "tool<|channel|>foo<|message|>bar<|end|>"
+        assert sanitize_function_name(dirty) == "tool"
+
+    def test_empty_returns_empty(self):
+        """Empty function name should return empty."""
+        assert sanitize_function_name("") == ""
+        assert sanitize_function_name(None) is None
 
 
 class TestOpenAIToHarmonyConversion:

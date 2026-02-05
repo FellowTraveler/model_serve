@@ -66,6 +66,26 @@ def contains_harmony_tokens(content: str) -> bool:
     return any(pattern in content for pattern in HARMONY_TOKEN_PATTERNS)
 
 
+def sanitize_function_name(fn_name: str) -> str:
+    """
+    Remove any Harmony token patterns from function names.
+
+    GPT-OSS models sometimes output malformed Harmony where token patterns
+    leak into the recipient field, resulting in function names like:
+    "developer__shell<|channel|>commentary" instead of "developer__shell"
+    """
+    if not fn_name:
+        return fn_name
+
+    # Find the first occurrence of any Harmony token pattern and truncate there
+    for pattern in HARMONY_TOKEN_PATTERNS:
+        idx = fn_name.find(pattern)
+        if idx != -1:
+            fn_name = fn_name[:idx]
+
+    return fn_name.strip()
+
+
 def sanitize_tool_arguments(args: str) -> str:
     """
     Clean tool call arguments to handle GPT-OSS hallucination behavior.
@@ -466,7 +486,7 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
 
     # Tool call with functions.X recipient
     if recipient and recipient.startswith("functions."):
-        fn_name = recipient.split(".", 1)[1]
+        fn_name = sanitize_function_name(recipient.split(".", 1)[1])
 
         # Analysis channel tool calls are deferred (likely hallucinated chain-of-thought)
         # Only emit them at the end if there's no other content
@@ -634,7 +654,7 @@ class HarmonyAccumulated:
             if channel == "final":
                 self.final_content.append(text)
             elif recipient and recipient.startswith("functions."):
-                fn_name = recipient.split(".", 1)[1]
+                fn_name = sanitize_function_name(recipient.split(".", 1)[1])
                 if channel == "analysis":
                     # Analysis channel tool calls are fallback (likely hallucinated)
                     self.analysis_tool_calls.append((fn_name, text))
