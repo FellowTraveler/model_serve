@@ -19,6 +19,7 @@ Works on **macOS** (Intel and Apple Silicon) and **Linux**.
 ## Features
 
 - **Single API endpoint** - All models accessible via one port (OpenAI-compatible)
+- **GPT-OSS Harmony support** - Automatic Harmony encoding/decoding for GPT-OSS models
 - **On-demand loading** - Models load when first requested, not at startup
 - **Auto-unload** - Models unload after idle timeout (TTL) or memory pressure
 - **Ollama integration** - Pull/remove models with automatic config sync
@@ -76,7 +77,7 @@ git submodule update --init --recursive
 ./model stop
 ```
 
-llama-swap listens on port 5847 by default (configurable via `LLAMA_SWAP_PORT` in `.env`).
+The Harmony proxy listens on port 5846 by default - this is the client-facing endpoint. All clients should connect here regardless of model. The proxy automatically handles Harmony encoding/decoding for GPT-OSS models and passes through all other models unchanged.
 
 ### Model Management
 
@@ -128,21 +129,27 @@ System Memory: 65.2% used (83.5GB / 128.0GB)
 
 ### API Endpoints
 
-These are llama-swap endpoints (port 5847 by default):
+Connect to port 5846 (Harmony proxy) for all models. The proxy handles Harmony encoding/decoding for GPT-OSS models automatically and passes through all other models unchanged.
 
 ```bash
-# Chat completion (OpenAI-compatible)
-curl http://127.0.0.1:5847/v1/chat/completions \
+# Chat completion (OpenAI-compatible) - works with any model
+curl http://127.0.0.1:5846/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "ls/gemma3:12.2b-q8_0", "messages": [{"role": "user", "content": "Hello"}]}'
 
+# GPT-OSS models work the same way - Harmony handled automatically
+curl http://127.0.0.1:5846/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "ls/gpt-oss-20b-derestricted-gguf-20.9b-q8_0", "messages": [{"role": "user", "content": "Hello"}]}'
+
 # List available models
-curl http://127.0.0.1:5847/v1/models
+curl http://127.0.0.1:5846/v1/models
 
-# List currently loaded models (with full details)
+# Health check
+curl http://127.0.0.1:5846/health
+
+# Direct llama-swap access (port 5847) - for debugging only
 curl http://127.0.0.1:5847/running
-
-# Unload a specific model
 curl -X POST "http://127.0.0.1:5847/unload?model=ls/gemma3:12.2b-q8_0"
 ```
 
@@ -152,7 +159,8 @@ curl -X POST "http://127.0.0.1:5847/unload?model=ls/gemma3:12.2b-q8_0"
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LLAMA_SWAP_PORT` | 5847 | API server port |
+| `HARMONY_PROXY_PORT` | 5846 | Client-facing API port (connects here) |
+| `LLAMA_SWAP_PORT` | 5847 | Internal llama-swap port (proxy forwards here) |
 | `MODEL_TTL` | 1800 | Idle timeout in seconds (30 min) |
 | `MEMORY_PRESSURE_THRESHOLD` | 75 | Memory % to trigger auto-unload (increase to 85+ for 128GB systems) |
 | `PRESSURE_CHECK_INTERVAL` | 30 | Seconds between memory pressure checks |
