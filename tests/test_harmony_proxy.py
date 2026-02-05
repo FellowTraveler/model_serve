@@ -95,13 +95,15 @@ class TestHarmonyToOpenAIConversion:
         """Analysis channel should be dropped in streaming output."""
         parser = StreamableParser(ENC, role=Role.ASSISTANT)
         state = HarmonySessionState()
+        chunk_id = "chatcmpl-test123"
+        created = 1234567890
 
         # Simulate analysis channel token
         harmony = "<|channel|>analysis<|message|>thinking...<|end|>"
         tokens = ENC.encode(harmony, allowed_special="all")
         for token in tokens:
             parser.process(token)
-            deltas = harmony_state_to_openai_deltas(parser, "test-model", state)
+            deltas = harmony_state_to_openai_deltas(parser, "test-model", state, chunk_id, created)
             # Analysis should produce no deltas
             for d in deltas:
                 assert "analysis" not in str(d)
@@ -110,6 +112,8 @@ class TestHarmonyToOpenAIConversion:
         """Final channel should produce content deltas."""
         parser = StreamableParser(ENC, role=Role.ASSISTANT)
         state = HarmonySessionState()
+        chunk_id = "chatcmpl-test123"
+        created = 1234567890
 
         harmony = "<|channel|>final<|message|>Hello world<|end|>"
         tokens = ENC.encode(harmony, allowed_special="all")
@@ -117,12 +121,17 @@ class TestHarmonyToOpenAIConversion:
         all_deltas = []
         for token in tokens:
             parser.process(token)
-            deltas = harmony_state_to_openai_deltas(parser, "test-model", state)
+            deltas = harmony_state_to_openai_deltas(parser, "test-model", state, chunk_id, created)
             all_deltas.extend(deltas)
 
         # Should have content deltas
         content_deltas = [d for d in all_deltas if "content" in d.get("choices", [{}])[0].get("delta", {})]
         assert len(content_deltas) > 0
+
+        # All deltas should have same id and created timestamp
+        for d in all_deltas:
+            assert d["id"] == chunk_id
+            assert d["created"] == created
 
     def test_tool_call_extraction_non_streaming(self):
         """Non-streaming: Tool calls should be extracted with complete arguments."""
@@ -152,6 +161,8 @@ class TestHarmonyToOpenAIConversion:
         """
         parser = StreamableParser(ENC, role=Role.ASSISTANT)
         state = HarmonySessionState()
+        chunk_id = "chatcmpl-test123"
+        created = 1234567890
 
         harmony = '<|channel|>commentary to=functions.get_weather<|constrain|>json<|message|>{"location":"NYC"}<|call|>'
         tokens = ENC.encode(harmony, allowed_special="all")
@@ -159,7 +170,7 @@ class TestHarmonyToOpenAIConversion:
         all_deltas = []
         for token in tokens:
             parser.process(token)
-            deltas = harmony_state_to_openai_deltas(parser, "test-model", state)
+            deltas = harmony_state_to_openai_deltas(parser, "test-model", state, chunk_id, created)
             all_deltas.extend(deltas)
 
         # Should have at least 2 deltas: header + arguments
@@ -170,6 +181,11 @@ class TestHarmonyToOpenAIConversion:
         tool_calls = first_delta["choices"][0]["delta"].get("tool_calls", [])
         assert len(tool_calls) == 1
         assert tool_calls[0]["function"]["name"] == "get_weather"
+
+        # All deltas should have same id and created timestamp
+        for delta in all_deltas:
+            assert delta["id"] == chunk_id
+            assert delta["created"] == created
 
         # Collect all argument fragments
         all_args = ""
@@ -195,6 +211,50 @@ class TestHarmonyToOpenAIConversion:
         assert response["choices"][0]["message"]["content"] == "Hello world"
         assert response["choices"][0]["finish_reason"] == "tool_calls"
         assert len(response["choices"][0]["message"]["tool_calls"]) == 1
+
+    def test_non_streaming_openai_spec_compliance(self):
+        """
+        Regression test: Non-streaming response must have all required OpenAI fields.
+
+        Required fields per OpenAI spec:
+        - id: Unique identifier starting with "chatcmpl-"
+        - object: Must be "chat.completion"
+        - created: Unix timestamp
+        - model: The model used
+        - choices: Array with message and finish_reason
+        - usage: Token usage statistics
+        """
+        acc = HarmonyAccumulated()
+        acc.final_content = ["Hello world"]
+
+        response = harmony_state_to_openai_final(acc, "test-model")
+
+        # Verify id format
+        assert "id" in response
+        assert response["id"].startswith("chatcmpl-")
+
+        # Verify object type
+        assert response["object"] == "chat.completion"
+
+        # Verify created timestamp is a reasonable Unix timestamp
+        assert "created" in response
+        assert isinstance(response["created"], int)
+        assert response["created"] > 1700000000  # After Nov 2023
+
+        # Verify model
+        assert response["model"] == "test-model"
+
+        # Verify choices structure
+        assert "choices" in response
+        assert len(response["choices"]) == 1
+        assert "message" in response["choices"][0]
+        assert "finish_reason" in response["choices"][0]
+
+        # Verify usage field exists with required subfields
+        assert "usage" in response
+        assert "prompt_tokens" in response["usage"]
+        assert "completion_tokens" in response["usage"]
+        assert "total_tokens" in response["usage"]
 
     def test_missing_trailing_end_token(self):
         """

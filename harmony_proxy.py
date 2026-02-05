@@ -238,7 +238,7 @@ class HarmonySessionState:
         return False
 
 
-def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: HarmonySessionState) -> list:
+def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: HarmonySessionState, chunk_id: str, created: int) -> list:
     """
     Convert StreamableParser state to OpenAI streaming deltas.
 
@@ -271,8 +271,9 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
             state.current_tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
 
             delta = {
-                "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
+                "id": chunk_id,
                 "object": "chat.completion.chunk",
+                "created": created,
                 "model": model,
                 "choices": [{
                     "index": 0,
@@ -296,8 +297,9 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
         # Stream arguments incrementally
         if delta_text:
             delta = {
-                "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
+                "id": chunk_id,
                 "object": "chat.completion.chunk",
+                "created": created,
                 "model": model,
                 "choices": [{
                     "index": 0,
@@ -325,8 +327,9 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
             state.emitted_role = True
 
         delta = {
-            "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
+            "id": chunk_id,
             "object": "chat.completion.chunk",
+            "created": created,
             "model": model,
             "choices": [{
                 "index": 0,
@@ -372,6 +375,8 @@ def harmony_state_to_openai_final(acc: HarmonyAccumulated, model: str) -> dict:
     """
     Build a non-streaming OpenAI chat completion from accumulated Harmony data.
     """
+    import time
+
     message = {
         "role": "assistant",
         "content": "".join(acc.final_content) if acc.final_content else None,
@@ -394,12 +399,18 @@ def harmony_state_to_openai_final(acc: HarmonyAccumulated, model: str) -> dict:
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
         "object": "chat.completion",
+        "created": int(time.time()),
         "model": model,
         "choices": [{
             "index": 0,
             "message": message,
             "finish_reason": finish_reason,
         }],
+        "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        },
     }
 
 
@@ -467,10 +478,12 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
         # Streaming response - client must be created inside generator
         # to avoid closing before iteration starts
         async def iter_sse():
+            import time
             parser = StreamableParser(ENC, role=Role.ASSISTANT)
             state = HarmonySessionState()
             harmony_parse_failed = False
             chunk_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+            created = int(time.time())
 
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream("POST", url, json=llama_req, timeout=None) as resp:
@@ -499,7 +512,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                                         tokens = ENC.encode(content, allowed_special='all')
                                         for token in tokens:
                                             parser.process(token)
-                                            deltas = harmony_state_to_openai_deltas(parser, model, state)
+                                            deltas = harmony_state_to_openai_deltas(parser, model, state, chunk_id, created)
                                             for delta in deltas:
                                                 yield f"data: {json.dumps(delta)}\n\n"
                                     except Exception as e:
@@ -523,7 +536,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                     tokens = ENC.encode("<|end|>", allowed_special='all')
                     for token in tokens:
                         parser.process(token)
-                        deltas = harmony_state_to_openai_deltas(parser, model, state)
+                        deltas = harmony_state_to_openai_deltas(parser, model, state, chunk_id, created)
                         for delta in deltas:
                             yield f"data: {json.dumps(delta)}\n\n"
                 except Exception:
@@ -533,6 +546,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
             stop_chunk = {
                 "id": chunk_id,
                 "object": "chat.completion.chunk",
+                "created": created,
                 "model": model,
                 "choices": [{
                     "index": 0,
