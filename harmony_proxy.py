@@ -71,7 +71,46 @@ def load_harmony_models():
         logger.warning(f"Invalid YAML in {config_path}: {e}")
         return set()
 
+
+def load_custom_models():
+    """Load custom model settings including Ollama name mappings."""
+    config_path = os.path.join(os.path.dirname(__file__), "custom_models.yaml")
+    try:
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f)
+        models = cfg.get("models", {})
+        logger.info(f"Loaded {len(models)} custom model configs")
+        return models
+    except FileNotFoundError:
+        logger.warning(f"{config_path} not found")
+        return {}
+    except yaml.YAMLError as e:
+        logger.warning(f"Invalid YAML in {config_path}: {e}")
+        return {}
+
+
 HARMONY_MODELS = load_harmony_models()
+CUSTOM_MODELS = load_custom_models()
+
+
+def get_ollama_model_name(model: str) -> str:
+    """
+    Translate model name to Ollama model name if mapping exists.
+
+    Handles both prefixed (ls/model-name) and unprefixed (model-name) formats.
+    """
+    # Strip ls/ prefix if present
+    base_name = model[3:] if model.startswith("ls/") else model
+
+    # Check if there's a custom config with ollama_model mapping
+    if base_name in CUSTOM_MODELS:
+        ollama_name = CUSTOM_MODELS[base_name].get("ollama_model")
+        if ollama_name:
+            logger.info(f"Mapped {model} -> {ollama_name}")
+            return ollama_name
+
+    # No mapping found, return original
+    return model
 
 # Load GPT-OSS Harmony encoding once at startup
 ENC = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
@@ -587,8 +626,10 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
         # Ollama backend - use /api/generate with raw mode
         # CRITICAL: Override stop sequences - Ollama's default stops at Harmony tokens
         # which breaks streaming. We need full Harmony output for parsing.
+        # Translate model name to Ollama name (ls/name -> hf.co/... mapping)
+        ollama_model = get_ollama_model_name(model)
         backend_req = {
-            "model": model,
+            "model": ollama_model,
             "prompt": harmony_prompt,
             "stream": True,
             "raw": True,  # Disable Ollama's chat templating
@@ -602,7 +643,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
         if "temperature" in body:
             backend_req["options"]["temperature"] = body["temperature"]
         url = f"{OLLAMA_BASE}/api/generate"
-        logger.info(f"Routing MXFP4 model to Ollama: {url}")
+        logger.info(f"Routing MXFP4 model {model} -> {ollama_model} to Ollama: {url}")
     else:
         # llama-swap backend - use /v1/completions
         backend_req = {

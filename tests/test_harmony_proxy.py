@@ -6,6 +6,7 @@ import pytest
 from harmony_proxy import (
     is_harmony_model,
     is_mxfp4_model,
+    get_ollama_model_name,
     openai_messages_to_harmony,
     openai_tools_to_harmony,
     build_conversation,
@@ -45,6 +46,20 @@ class TestModelRouting:
         assert not is_mxfp4_model("ls/gpt-oss-20b-derestricted-gguf-20.9b-q8_0")
         assert not is_mxfp4_model("llama-3.1-8b")
         assert not is_mxfp4_model("qwen3-0.6b")
+
+    def test_ollama_model_name_mapping(self):
+        """MXFP4 model names should be translated to Ollama names."""
+        # With ls/ prefix
+        mapped = get_ollama_model_name("ls/gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
+        assert mapped == "hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest"
+
+        # Without ls/ prefix
+        mapped = get_ollama_model_name("gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
+        assert mapped == "hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest"
+
+        # Unknown model returns original
+        mapped = get_ollama_model_name("ls/some-unknown-model")
+        assert mapped == "ls/some-unknown-model"
 
 
 class TestOpenAIToHarmonyConversion:
