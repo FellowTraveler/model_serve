@@ -434,14 +434,17 @@ async def proxy_openai_endpoint(path: str, body: dict, stream: bool):
     Preserves request/response byte-for-byte.
     """
     url = f"{LLAMA_SWAP_BASE}{path}"
-    async with httpx.AsyncClient(timeout=None) as client:
-        if stream:
-            async def iter_stream():
+
+    if stream:
+        # Client must be created inside the generator to avoid closing before iteration
+        async def iter_stream():
+            async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream("POST", url, json=body, timeout=None) as resp:
                     async for chunk in resp.aiter_raw():
                         yield chunk
-            return StreamingResponse(iter_stream(), media_type="text/event-stream")
-        else:
+        return StreamingResponse(iter_stream(), media_type="text/event-stream")
+    else:
+        async with httpx.AsyncClient(timeout=None) as client:
             resp = await client.post(url, json=body, timeout=None)
             return JSONResponse(content=resp.json(), status_code=resp.status_code)
 
@@ -630,7 +633,10 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
 async def chat_completions(request: Request):
     """
     OpenAI-compatible chat completions endpoint.
-    Routes to Harmony handler for GPT-OSS models, passthrough for others.
+
+    NOTE: llama-swap/llama.cpp handles Harmony encoding/decoding via Jinja templates,
+    so we pass through all models transparently. The proxy still serves as a unified
+    endpoint and can add logging/filtering in the future.
     """
     try:
         body = await request.json()
@@ -642,10 +648,8 @@ async def chat_completions(request: Request):
 
     logger.info(f"Chat completion request: model={model}, stream={stream}, harmony={is_harmony_model(model)}")
 
-    if is_harmony_model(model):
-        return await handle_chat_with_harmony(body, stream)
-    else:
-        return await proxy_openai_endpoint("/v1/chat/completions", body, stream)
+    # Pass through to llama-swap - it handles Harmony via Jinja templates
+    return await proxy_openai_endpoint("/v1/chat/completions", body, stream)
 
 
 # ============================================================================
