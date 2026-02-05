@@ -552,9 +552,44 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
             harmony_parse_failed = False
             chunk_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
             created = int(time.time())
+            chunks_received = 0
+            deltas_emitted = 0
 
+            logger.info(f"Starting streaming request to {url}")
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream("POST", url, json=llama_req, timeout=None) as resp:
+                    logger.info(f"Upstream response status: {resp.status_code}")
+
+                    # Handle upstream errors (e.g., context length exceeded)
+                    if resp.status_code != 200:
+                        error_body = await resp.aread()
+                        error_text = error_body.decode("utf-8", errors="replace")
+                        logger.error(f"Upstream error {resp.status_code}: {error_text[:500]}")
+
+                        # Return error as assistant message so Goose knows what happened
+                        error_chunk = {
+                            "id": chunk_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [{
+                                "index": 0,
+                                "delta": {"role": "assistant", "content": f"Error from model server: {error_text[:200]}"},
+                                "finish_reason": None,
+                            }],
+                        }
+                        yield f"data: {json.dumps(error_chunk)}\n\n"
+                        stop_chunk = {
+                            "id": chunk_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                        }
+                        yield f"data: {json.dumps(stop_chunk)}\n\n"
+                        yield "data: [DONE]\n\n"
+                        return
+
                     async for line in resp.aiter_lines():
                         if not line.startswith("data: "):
                             continue
@@ -564,6 +599,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
 
                         try:
                             chunk = json.loads(data)
+                            chunks_received += 1
                             # completions endpoint uses 'text', not 'delta.content'
                             content = chunk.get("choices", [{}])[0].get("text", "")
                             if content:
@@ -583,6 +619,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                                             parser.process(token)
                                             deltas = harmony_state_to_openai_deltas(parser, model, state, chunk_id, created)
                                             for delta in deltas:
+                                                deltas_emitted += 1
                                                 yield f"data: {json.dumps(delta)}\n\n"
                                     except Exception as e:
                                         logger.warning(f"Harmony parse error in stream, falling back to raw: {e}")
@@ -612,6 +649,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                     pass  # Ignore finalization errors in streaming
 
             # Emit final chunk with appropriate finish_reason
+            logger.info(f"Stream complete: chunks_received={chunks_received}, deltas_emitted={deltas_emitted}, has_tool_calls={state.has_tool_calls}")
             finish_reason = "tool_calls" if state.has_tool_calls else "stop"
             stop_chunk = {
                 "id": chunk_id,
