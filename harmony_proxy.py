@@ -221,6 +221,7 @@ class HarmonySessionState:
     """
     def __init__(self):
         self.emitted_tool_call_for_message = False
+        self.current_tool_call_id = None
         self.last_channel = None
         self.last_recipient = None
 
@@ -230,6 +231,7 @@ class HarmonySessionState:
             self.last_channel = channel
             self.last_recipient = recipient
             self.emitted_tool_call_for_message = False
+            self.current_tool_call_id = None
             return True
         return False
 
@@ -259,9 +261,12 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
 
     # Tool call: commentary channel with functions.X recipient
     if channel == "commentary" and recipient and recipient.startswith("functions."):
+        fn_name = recipient.split(".", 1)[1]
+
         if not state.emitted_tool_call_for_message:
-            fn_name = recipient.split(".", 1)[1]
+            # First chunk: emit tool call header with function name
             state.emitted_tool_call_for_message = True
+            state.current_tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
 
             delta = {
                 "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
@@ -272,11 +277,12 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
                     "delta": {
                         "role": "assistant",
                         "tool_calls": [{
-                            "id": f"call_{uuid.uuid4().hex[:24]}",
+                            "index": 0,
+                            "id": state.current_tool_call_id,
                             "type": "function",
                             "function": {
                                 "name": fn_name,
-                                "arguments": content,
+                                "arguments": "",
                             },
                         }],
                     },
@@ -284,6 +290,28 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
                 }],
             }
             deltas.append(delta)
+
+        # Stream arguments incrementally
+        if delta_text:
+            delta = {
+                "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
+                "object": "chat.completion.chunk",
+                "model": model,
+                "choices": [{
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [{
+                            "index": 0,
+                            "function": {
+                                "arguments": delta_text,
+                            },
+                        }],
+                    },
+                    "finish_reason": None,
+                }],
+            }
+            deltas.append(delta)
+
         return deltas
 
     # Final channel: user-visible assistant content
