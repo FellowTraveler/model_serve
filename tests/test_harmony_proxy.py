@@ -355,6 +355,38 @@ class TestHarmonyToOpenAIConversion:
         assert len(acc_after.final_content) == 1
         assert acc_after.final_content[0] == "Hello"
 
+    def test_analysis_channel_tool_calls_are_fallback(self):
+        """
+        Regression test: Tool calls in analysis channel should only be used as fallback.
+
+        GPT-OSS models sometimes put tool calls in the analysis channel instead of
+        commentary. These should only be used if there's no other content (no
+        commentary tool calls and no final content), since they're likely
+        hallucinated chain-of-thought.
+        """
+        # Case 1: Analysis tool call only -> should be used as fallback
+        acc1 = HarmonyAccumulated()
+        acc1.analysis_tool_calls = [("get_time", "{}")]
+        assert acc1.get_effective_tool_calls() == [("get_time", "{}")]
+
+        # Case 2: Both analysis and commentary tool calls -> prefer commentary
+        acc2 = HarmonyAccumulated()
+        acc2.tool_calls = [("real_tool", '{"real": true}')]
+        acc2.analysis_tool_calls = [("hallucinated_tool", '{"fake": true}')]
+        assert acc2.get_effective_tool_calls() == [("real_tool", '{"real": true}')]
+
+        # Case 3: Analysis tool call + final content -> don't use analysis tool call
+        acc3 = HarmonyAccumulated()
+        acc3.final_content = ["Here's the answer..."]
+        acc3.analysis_tool_calls = [("ignored_tool", "{}")]
+        assert acc3.get_effective_tool_calls() == []
+
+        # Case 4: Commentary tool call + final content -> use commentary tool call
+        acc4 = HarmonyAccumulated()
+        acc4.final_content = ["Running the tool..."]
+        acc4.tool_calls = [("real_tool", "{}")]
+        assert acc4.get_effective_tool_calls() == [("real_tool", "{}")]
+
 
 class TestHarmonyParseFallback:
     """Test fallback to raw content when Harmony parsing fails."""

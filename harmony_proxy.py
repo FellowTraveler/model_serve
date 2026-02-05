@@ -280,6 +280,8 @@ class HarmonySessionState:
         self.last_channel = None
         self.last_recipient = None
         self.has_tool_calls = False  # Track if ANY tool calls were made (for finish_reason)
+        self.has_real_content = False  # Track if we emitted commentary tool calls or final content
+        self.deferred_analysis_tool_calls = []  # Buffer analysis channel tool calls as fallback
 
     def check_and_update(self, channel: str, recipient: str) -> bool:
         """Check if state changed and update. Returns True if new message started."""
@@ -298,8 +300,10 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
     Convert StreamableParser state to OpenAI streaming deltas.
 
     Channel handling:
-    - analysis: IGNORE (internal reasoning, not user-visible)
-    - commentary + functions.X recipient: TOOL CALL
+    - commentary + functions.X recipient: TOOL CALL (preferred)
+    - analysis + functions.X recipient: DEFERRED tool call (only used if no real content)
+    - analysis (without functions recipient): IGNORE (internal reasoning)
+    - commentary (without functions recipient): IGNORE
     - final: USER-VISIBLE content
     """
     deltas = []
@@ -307,23 +311,38 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
     channel = parser.current_channel
     recipient = parser.current_recipient
     delta_text = parser.last_content_delta or ""
-    content = parser.current_content or ""
 
     # Track state changes
     state.check_and_update(channel, recipient)
 
-    # Drop analysis channel (chain-of-thought)
-    if channel == "analysis":
-        return deltas
-
-    # Tool call: commentary channel with functions.X recipient
-    if channel == "commentary" and recipient and recipient.startswith("functions."):
+    # Tool call with functions.X recipient
+    if recipient and recipient.startswith("functions."):
         fn_name = recipient.split(".", 1)[1]
 
+        # Analysis channel tool calls are deferred (likely hallucinated chain-of-thought)
+        # Only emit them at the end if there's no other content
+        if channel == "analysis":
+            # Buffer the tool call info for potential later use
+            if not state.emitted_tool_call_for_message:
+                state.emitted_tool_call_for_message = True
+                tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
+                state.current_tool_call_id = tool_call_id
+                state.deferred_analysis_tool_calls.append({
+                    "fn_name": fn_name,
+                    "tool_call_id": tool_call_id,
+                    "arguments": delta_text,
+                })
+            elif delta_text and state.deferred_analysis_tool_calls:
+                # Append to the last deferred tool call's arguments
+                state.deferred_analysis_tool_calls[-1]["arguments"] += delta_text
+            return deltas  # Don't emit yet
+
+        # Commentary channel tool calls are emitted immediately (preferred)
         if not state.emitted_tool_call_for_message:
             # First chunk: emit tool call header with function name
             state.emitted_tool_call_for_message = True
             state.has_tool_calls = True  # Track for finish_reason
+            state.has_real_content = True  # Mark that we have real content
             state.current_tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
 
             delta = {
@@ -376,6 +395,8 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
 
     # Final channel: user-visible assistant content
     if channel == "final" and delta_text:
+        state.has_real_content = True  # Mark that we have real content
+
         # Build delta - only include role in first chunk (OpenAI spec)
         delta_content = {"content": delta_text}
         if not state.emitted_role:
@@ -405,7 +426,8 @@ class HarmonyAccumulated:
     """
     def __init__(self):
         self.final_content = []
-        self.tool_calls = []  # List of (name, args) tuples
+        self.tool_calls = []  # List of (name, args) tuples - preferred (from commentary channel)
+        self.analysis_tool_calls = []  # Fallback tool calls from analysis channel
 
     def add_from_parser(self, parser: StreamableParser):
         """Extract and accumulate data from parser's completed messages."""
@@ -422,9 +444,23 @@ class HarmonyAccumulated:
 
             if channel == "final":
                 self.final_content.append(text)
-            elif channel == "commentary" and recipient and recipient.startswith("functions."):
+            elif recipient and recipient.startswith("functions."):
                 fn_name = recipient.split(".", 1)[1]
-                self.tool_calls.append((fn_name, text))
+                if channel == "analysis":
+                    # Analysis channel tool calls are fallback (likely hallucinated)
+                    self.analysis_tool_calls.append((fn_name, text))
+                else:
+                    # Commentary channel tool calls are preferred
+                    self.tool_calls.append((fn_name, text))
+
+    def get_effective_tool_calls(self):
+        """Get tool calls to use: prefer commentary, fall back to analysis if no other content."""
+        if self.tool_calls:
+            return self.tool_calls
+        if self.final_content:
+            return []  # Have final content, don't use analysis tool calls
+        # No real content, use analysis tool calls as fallback
+        return self.analysis_tool_calls
 
 
 def harmony_state_to_openai_final(acc: HarmonyAccumulated, model: str) -> dict:
@@ -439,9 +475,11 @@ def harmony_state_to_openai_final(acc: HarmonyAccumulated, model: str) -> dict:
     }
     finish_reason = "stop"
 
-    if acc.tool_calls:
+    # Use effective tool calls (prefers commentary, falls back to analysis if no other content)
+    effective_tool_calls = acc.get_effective_tool_calls()
+    if effective_tool_calls:
         message["tool_calls"] = []
-        for fn_name, args in acc.tool_calls:
+        for fn_name, args in effective_tool_calls:
             message["tool_calls"].append({
                 "id": f"call_{uuid.uuid4().hex[:24]}",
                 "type": "function",
@@ -554,6 +592,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
             created = int(time.time())
             chunks_received = 0
             deltas_emitted = 0
+            accumulated_raw = []  # For debugging if nothing is emitted
 
             logger.info(f"Starting streaming request to {url}")
             async with httpx.AsyncClient(timeout=None) as client:
@@ -603,6 +642,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                             # completions endpoint uses 'text', not 'delta.content'
                             content = chunk.get("choices", [{}])[0].get("text", "")
                             if content:
+                                accumulated_raw.append(content)
                                 if harmony_parse_failed:
                                     # After parse failure, stream raw content
                                     raw_chunk = {
@@ -647,6 +687,71 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                             yield f"data: {json.dumps(delta)}\n\n"
                 except Exception:
                     pass  # Ignore finalization errors in streaming
+
+            # Emit deferred analysis tool calls if we have no other content
+            # These are likely hallucinated chain-of-thought, but better than nothing
+            if not state.has_real_content and state.deferred_analysis_tool_calls:
+                logger.info(f"Emitting {len(state.deferred_analysis_tool_calls)} deferred analysis tool call(s) as fallback")
+                for deferred in state.deferred_analysis_tool_calls:
+                    # Emit tool call header
+                    header_delta = {
+                        "id": chunk_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": model,
+                        "choices": [{
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "tool_calls": [{
+                                    "index": 0,
+                                    "id": deferred["tool_call_id"],
+                                    "type": "function",
+                                    "function": {
+                                        "name": deferred["fn_name"],
+                                        "arguments": "",
+                                    },
+                                }],
+                            },
+                            "finish_reason": None,
+                        }],
+                    }
+                    yield f"data: {json.dumps(header_delta)}\n\n"
+                    deltas_emitted += 1
+
+                    # Emit arguments
+                    if deferred["arguments"]:
+                        args_delta = {
+                            "id": chunk_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [{
+                                "index": 0,
+                                "delta": {
+                                    "tool_calls": [{
+                                        "index": 0,
+                                        "function": {
+                                            "arguments": deferred["arguments"],
+                                        },
+                                    }],
+                                },
+                                "finish_reason": None,
+                            }],
+                        }
+                        yield f"data: {json.dumps(args_delta)}\n\n"
+                        deltas_emitted += 1
+
+                    state.has_tool_calls = True
+
+            # Log parser state if we emitted nothing (helps debug)
+            if deltas_emitted == 0:
+                raw_text = "".join(accumulated_raw)
+                logger.warning(f"No deltas emitted! Raw content ({len(raw_text)} chars): {raw_text[:500]}")
+                logger.warning(f"Parser state: messages={len(parser.messages)}, "
+                             f"current_channel={parser.current_channel}, current_recipient={parser.current_recipient}")
+                for i, msg in enumerate(parser.messages):
+                    logger.warning(f"  Message {i}: channel={msg.channel}, recipient={msg.recipient}")
 
             # Emit final chunk with appropriate finish_reason
             logger.info(f"Stream complete: chunks_received={chunks_received}, deltas_emitted={deltas_emitted}, has_tool_calls={state.has_tool_calls}")
