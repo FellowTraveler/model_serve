@@ -57,6 +57,15 @@ def is_mxfp4_model(model: str) -> bool:
     return "mxfp4" in model.lower()
 
 
+# Harmony special token patterns - content containing these should not be streamed as raw
+HARMONY_TOKEN_PATTERNS = ("<|channel|>", "<|message|>", "<|constrain|>", "<|call|>", "<|end|>", "<|start|>")
+
+
+def contains_harmony_tokens(content: str) -> bool:
+    """Check if content contains raw Harmony token patterns that should not be streamed."""
+    return any(pattern in content for pattern in HARMONY_TOKEN_PATTERNS)
+
+
 def sanitize_tool_arguments(args: str) -> str:
     """
     Clean tool call arguments to handle GPT-OSS hallucination behavior.
@@ -409,6 +418,9 @@ class HarmonySessionState:
         self.args_in_string = False
         self.args_escape_next = False
         self.args_first_object_complete = False
+        # Persistent flag: once set, suppress ALL further content (including channel changes)
+        # This handles GPT-OSS hallucinating tool responses after the real arguments
+        self.suppress_remaining_output = False
 
     def check_and_update(self, channel: str, recipient: str) -> bool:
         """Check if state changed and update. Returns True if new message started."""
@@ -439,6 +451,11 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
     - final: USER-VISIBLE content
     """
     deltas = []
+
+    # If we've already truncated a tool call due to hallucination, suppress ALL further output
+    # This prevents GPT-OSS hallucinated responses from leaking through as content
+    if state.suppress_remaining_output:
+        return deltas
 
     channel = parser.current_channel
     recipient = parser.current_recipient
@@ -534,7 +551,8 @@ def harmony_state_to_openai_deltas(parser: StreamableParser, model: str, state: 
                         filtered_text.append(c)
                         if state.args_json_depth == 0:
                             state.args_first_object_complete = True
-                            logger.info("Streaming args: first JSON object complete, truncating hallucinated content")
+                            state.suppress_remaining_output = True  # Suppress all further output
+                            logger.info("Streaming args: first JSON object complete, suppressing remaining hallucinated output")
                     else:
                         filtered_text.append(c)
                 else:
@@ -859,6 +877,12 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                             accumulated_raw.append(content)
                             if harmony_parse_failed:
                                 # After parse failure, stream raw content
+                                # But if we've suppressed output (tool call hallucination), don't stream
+                                if state.suppress_remaining_output:
+                                    continue
+                                # Don't stream content that contains raw Harmony tokens
+                                if contains_harmony_tokens(content):
+                                    continue
                                 raw_chunk = {
                                     "id": chunk_id,
                                     "object": "chat.completion.chunk",
@@ -879,14 +903,16 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                                     logger.warning(f"Harmony parse error in stream, falling back to raw: {e}")
                                     logger.debug(f"Raw content that failed Harmony parse: {content[:200]}")
                                     harmony_parse_failed = True
-                                    # Yield current content as raw
-                                    raw_chunk = {
-                                        "id": chunk_id,
-                                        "object": "chat.completion.chunk",
-                                        "model": model,
-                                        "choices": [{"index": 0, "delta": {"content": content}}],
-                                    }
-                                    yield f"data: {json.dumps(raw_chunk)}\n\n"
+                                    # Yield current content as raw, unless we've suppressed output
+                                    # or content contains raw Harmony tokens
+                                    if not state.suppress_remaining_output and not contains_harmony_tokens(content):
+                                        raw_chunk = {
+                                            "id": chunk_id,
+                                            "object": "chat.completion.chunk",
+                                            "model": model,
+                                            "choices": [{"index": 0, "delta": {"content": content}}],
+                                        }
+                                        yield f"data: {json.dumps(raw_chunk)}\n\n"
 
             # Finalize parsing by sending <|end|> if we're still in Harmony mode
             if not harmony_parse_failed:

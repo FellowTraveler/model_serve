@@ -338,6 +338,62 @@ class TestHarmonyToOpenAIConversion:
         # This flag should be used for finish_reason in the final chunk:
         # finish_reason = "tool_calls" if state.has_tool_calls else "stop"
 
+    def test_streaming_suppresses_hallucinated_content_after_tool_args(self):
+        """
+        Regression test: After tool call arguments close, all further content is suppressed.
+
+        GPT-OSS models sometimes hallucinate entire tool response sequences after the
+        real tool call arguments, like:
+        {"command":"ls"}{"stdout":"file1"}...
+
+        When we detect the first JSON object is complete, we must suppress ALL further
+        output, including any subsequent "final" channel content, because it's all
+        part of the hallucination.
+
+        Before this fix, raw Harmony tokens like "<|message|>" and "final" were leaking
+        through as content chunks to the client.
+        """
+        parser = StreamableParser(ENC, role=Role.ASSISTANT)
+        state = HarmonySessionState()
+        chunk_id = "chatcmpl-test123"
+        created = 1234567890
+
+        # Simulate model outputting tool call with hallucinated response after
+        # This is what GPT-OSS does: outputs the tool call args, then hallucinates
+        # a response as if the tool had executed
+        harmony_tool_call = '<|channel|>commentary to=functions.shell<|constrain|>json<|message|>{"command":"ls"}'
+        tokens = ENC.encode(harmony_tool_call, allowed_special="all")
+
+        tool_deltas = []
+        for token in tokens:
+            parser.process(token)
+            deltas = harmony_state_to_openai_deltas(parser, "test-model", state, chunk_id, created)
+            tool_deltas.extend(deltas)
+
+        # We should have emitted tool call deltas
+        assert len(tool_deltas) > 0
+        assert state.has_tool_calls is True
+
+        # Now the model hallucinates more content (e.g., tool response)
+        # This should be suppressed because we already closed the first JSON object
+        hallucinated = '{"stdout":"file1"}' + '<|channel|>final<|message|>Here is the output'
+        tokens = ENC.encode(hallucinated, allowed_special="all")
+
+        hallucinated_deltas = []
+        for token in tokens:
+            parser.process(token)
+            deltas = harmony_state_to_openai_deltas(parser, "test-model", state, chunk_id, created)
+            hallucinated_deltas.extend(deltas)
+
+        # After first JSON object closes, suppress_remaining_output should be True
+        assert state.suppress_remaining_output is True
+
+        # No further deltas should be emitted (all suppressed)
+        # The hallucinated content should NOT leak through as "final" channel content
+        for delta in hallucinated_deltas:
+            content = delta.get("choices", [{}])[0].get("delta", {}).get("content")
+            assert content is None, f"Hallucinated content leaked through: {content}"
+
     def test_non_streaming_final_response(self):
         """Non-streaming response should have correct format."""
         acc = HarmonyAccumulated()
