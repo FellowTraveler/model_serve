@@ -1,225 +1,172 @@
-# Custom model settings
-# These override the auto-generated defaults from generate_config.py
-#
-# For each model, you can specify:
-#   sampler_args: Additional args appended to llama-server command
-#   cmd: Full command override (use ${MODEL_PATH} and ${PORT} placeholders)
-#   ttl: Custom idle timeout in seconds
-#
-# Model names should NOT include the ls/ prefix
-# Model names come from the symlinks created by lm-studio-ollama-bridge
-# (check config.yaml for the exact names after running ./model sync)
-#
-# Sampler notes:
-#   --top-nsigma 1.5  Adaptive sampling based on logit std deviation
-#   --min-p 0.05      Filters tokens below 5% of top token probability
-#   --temp            Higher is fine with top-nsigma (1.0-1.2 for general, lower for code/mistral)
-#   top-p defaults to 1.0 (disabled) when not specified
-
 models:
-  # ============================================================================
-  # General models (temp 1.2 - works well with top-nsigma + min-p)
-  # ============================================================================
-
-  # --- GPT-OSS Derestricted models (supports 128k context) ---
-  # NOTE: GPT-OSS uses Harmony format. We disable jinja so llama-server outputs
-  # raw Harmony tokens, then our harmony_proxy handles the encoding/decoding.
-  #
-  # MXFP4 models: llama.cpp doesn't support MXFP4 quantization, so these route
-  # to Ollama. The ollama_model field maps the ls/ name to the Ollama model name.
   gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest:
-    ollama_model: "hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest"
-    sampler_args: "--temp 0.7 --top-p 0.95 --top-k 40"
+    ollama_model: hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest
+    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40
     ctx_size: 65536
     jinja: false
   gguf-mxfp4-gpt-oss-120b-derestricted-117b-latest:
-    ollama_model: "hf.co/gghfez/gpt-oss-120b-Derestricted.MXFP4_MOE-gguf:latest"
-    sampler_args: "--temp 0.7 --top-p 0.95 --top-k 40"
+    ollama_model: hf.co/gghfez/gpt-oss-120b-Derestricted.MXFP4_MOE-gguf:latest
+    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40
     ctx_size: 65536
     jinja: false
-
   gpt-oss-120b-derestricted-gguf-117b-latest:
-    sampler_args: "--temp 0.7 --top-p 0.95 --top-k 40"
+    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40
     ctx_size: 65536
     jinja: false
   gpt-oss-20b-derestricted-gguf-20.9b-q8_0:
-    sampler_args: "--temp 0.7 --top-p 0.95 --top-k 40"
+    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40
     ctx_size: 65536
     jinja: false
   gpt-oss-20b-gguf-20.9b-q8_k_xl:
-    sampler_args: "--temp 0.7 --top-p 0.95 --top-k 40"
+    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40
     ctx_size: 65536
     jinja: false
-
-  # --- Gemma models (supports 32k context) ---
-  # Per Unsloth/Google: temp 1.0, top-p 0.95, top-k 64 (no min-p/top-nsigma)
-  # Uses relaxed chat template to allow tool-calling agents (Goose) to work
   gemma-3-27b-derestricted-gguf-27b-q8_0:
-    sampler_args: "--temp 1.0 --top-p 0.95 --top-k 64"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
     chat_template_file: /Users/au/src/model_serve/templates/gemma3-relaxed.jinja
-
-  # Alias without special characters (for clients that have trouble with colons)
   gemma27b:
     base_model: gemma-3-27b-derestricted-gguf-27b-q8_0
-    sampler_args: "--temp 1.0 --top-p 0.95 --top-k 64"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
     chat_template_file: /Users/au/src/model_serve/templates/gemma3-relaxed.jinja
   gemma3-12.2b-q8_0:
     jinja: true
-    sampler_args: "--temp 1.0 --top-p 0.95 --top-k 64"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
-
-  # Alias: same model, tuned for creative/diverse outputs (also demos smaller ctx)
   gemma3-creative:
     base_model: gemma3-12.2b-q8_0
     jinja: true
-    sampler_args: "--temp 1.2 --top-p 0.9 --top-k 64"
+    sampler_args: --temp 1.2 --top-p 0.9 --top-k 64
     ctx_size: 8192
-
   gemma3-4.3b-f16:
     jinja: true
-    sampler_args: "--temp 1.0 --top-p 0.95 --top-k 64"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
   gemma3-27.4b-q8_0:
     jinja: true
-    sampler_args: "--temp 1.0 --top-p 0.95 --top-k 64"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
   medgemma3-27.0b-q4_k_m:
     jinja: true
-    sampler_args: "--temp 1.0 --top-p 0.95 --top-k 64"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
   translategemma-12.2b-q8_0:
     jinja: true
-    sampler_args: "--temp 1.0 --top-p 0.95 --top-k 64"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
-  # QAT models (Ollama "qat" = actual q4_0 quantization in GGUF):
-  gemma3-12.2b-q4_0:  # gemma3:12b-it-qat in Ollama
+  gemma3-12.2b-q4_0:
     jinja: true
-    sampler_args: "--temp 1.0 --top-p 0.95 --top-k 64"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
-  gemma3-4.3b-q4_0:  # gemma3:4b-it-qat in Ollama
+  gemma3-4.3b-q4_0:
     jinja: true
-    sampler_args: "--temp 1.0 --top-p 0.95 --top-k 64"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
-  gemma3-999.89m-q4_0:  # gemma3:1b-it-qat in Ollama
+  gemma3-999.89m-q4_0:
     jinja: true
-    sampler_args: "--temp 1.0 --top-p 0.95 --top-k 64"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
-
-  # --- GLM models (supports 128k context) ---
-  # GLM-4.7 is a thinking model; --reasoning-budget 0 disables thinking
   glm-4.7-flash-gguf-29.9b-q8_k_xl:
     jinja: true
-    sampler_args: "--reasoning-budget 0 --top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+    sampler_args: --reasoning-budget 0 --top-nsigma 1.5 --min-p 0.05 --temp 1.2
     ctx_size: 65536
   glm-4.7-flash-derestricted-gguf-29.9b-q8_0:
     jinja: true
-    sampler_args: "--reasoning-budget 0 --top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+    sampler_args: --reasoning-budget 0 --top-nsigma 1.5 --min-p 0.05 --temp 1.2
     ctx_size: 65536
-
-  # --- Qwen3 models (supports 32k context) ---
-  # Qwen3 is a thinking model; disable via chat_template_kwargs (--reasoning-budget 0 is buggy)
-  # Per Qwen guidance: temp 0.6, top-p 0.95, top-k 40, repeat-penalty 1.05
   qwen3-vl-31.1b-q8_0:
     jinja: true
     chat_template_kwargs: '{"enable_thinking": false}'
-    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
     ctx_size: 32768
   qwen3-next-79.7b-q4_k_m:
     jinja: true
     chat_template_kwargs: '{"enable_thinking": false}'
-    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
     ctx_size: 32768
   qwen3-32.8b-q8_0:
     jinja: true
     chat_template_kwargs: '{"enable_thinking": false}'
-    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
     ctx_size: 32768
   qwen3-32.8b-q4_k_m:
     jinja: true
     chat_template_kwargs: '{"enable_thinking": false}'
-    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
     ctx_size: 32768
   qwen3-14.8b-q8_0:
     jinja: true
     chat_template_kwargs: '{"enable_thinking": false}'
-    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
     ctx_size: 32768
   qwen3-8.2b-q8_0:
     jinja: true
     chat_template_kwargs: '{"enable_thinking": false}'
-    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
     ctx_size: 32768
   qwen3-4.0b-q8_0:
     jinja: true
     chat_template_kwargs: '{"enable_thinking": false}'
-    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
     ctx_size: 32768
   qwen3-2.0b-q4_k_m:
     jinja: true
     chat_template_kwargs: '{"enable_thinking": false}'
-    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
     ctx_size: 32768
   qwen3-751.63m-q4_k_m:
     jinja: true
     chat_template_kwargs: '{"enable_thinking": false}'
-    sampler_args: "--temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05"
+    sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
     ctx_size: 32768
-
-  # --- Llama models (supports 128k context) ---
   llama3.2-3.2b-f16:
     jinja: true
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 1.2
     ctx_size: 65536
   llama3.2-1.2b-f16:
     jinja: true
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 1.2
     ctx_size: 65536
   llama3.3-70.6b-q6_k:
     jinja: true
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.2"
+    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 1.2
     ctx_size: 65536
-
-  # ============================================================================
-  # Mistral models (temp 0.7 - these models prefer lower temperature)
-  # Supports 32k context
-  # ============================================================================
   mistral-small3.2-24.0b-q8_0:
     jinja: true
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.7
     ctx_size: 32768
   mistral-small3.2-24.0b-q4_k_m:
     jinja: true
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.7
     ctx_size: 32768
   ministral-3-13.9b-q8_0:
     jinja: true
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.7
     ctx_size: 32768
   ministral-3-8.9b-q8_0:
     jinja: true
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.7
     ctx_size: 32768
   ministral-3-3.8b-q8_0:
     jinja: true
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.7"
+    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.7
     ctx_size: 32768
-
-  # ============================================================================
-  # Coding models (temp 0.4 - lower for more deterministic code generation)
-  # Supports 32k context
-  # ============================================================================
   devstral-small-2-24.0b-q8_0:
     jinja: true
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.4"
+    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.4
     ctx_size: 32768
   devstral-small-2-24.0b-q4_k_m:
     jinja: true
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.4"
+    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.4
     ctx_size: 32768
   codestral-22.2b-q8_0:
     jinja: true
-    sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.4"
+    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.4
     ctx_size: 32768
-    ttl: 3600  # Keep loaded longer for coding sessions
+    ttl: 3600
+  gpt-oss-120b-derestricted.mxfp4_moe-gguf-117b-latest:
+    ollama_model: hf.co/gghfez/gpt-oss-120b-Derestricted.MXFP4_MOE-gguf:latest
+    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40
+    ctx_size: 65536
+    jinja: false

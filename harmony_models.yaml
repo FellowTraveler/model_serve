@@ -1,12 +1,5 @@
-# Harmony-native models that require Harmony encoding/decoding
-# Model names MUST match exactly with llama-swap model names as exposed by model_serve
-#
-# Only GPT-OSS family models are trained on Harmony format.
-# Other models (Qwen, Llama, Gemma, etc.) should NOT be listed here.
-#
-# Note: mxfp4 models aren't supported in llama-swap
-
 harmony_models:
-  - ls/gpt-oss-120b-derestricted-gguf-117b-latest
-  - ls/gpt-oss-20b-derestricted-gguf-20.9b-q8_0
-  - ls/gpt-oss-20b-gguf-20.9b-q8_k_xl
+- ls/gpt-oss-120b-derestricted-gguf-117b-latest
+- ls/gpt-oss-20b-derestricted-gguf-20.9b-q8_0
+- ls/gpt-oss-20b-gguf-20.9b-q8_k_xl
+- ls/gpt-oss-120b-derestricted.mxfp4_moe-gguf-117b-latest

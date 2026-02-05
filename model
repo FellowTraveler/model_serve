@@ -297,6 +297,124 @@ def do_sync():
         print("Config unchanged, skipping reload")
 
 
+def is_mxfp4_model(model_name: str) -> bool:
+    """Check if model name contains MXFP4 (case-insensitive)."""
+    return "mxfp4" in model_name.lower()
+
+
+def extract_ollama_slug(ollama_model_name: str) -> str:
+    """
+    Extract the model slug from an Ollama model name.
+
+    Examples:
+        hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest
+        -> gguf-mxfp4-gpt-oss-20b-derestricted
+
+        hf.co/gghfez/gpt-oss-120b-Derestricted.MXFP4_MOE-gguf:latest
+        -> gpt-oss-120b-derestricted.mxfp4_moe-gguf
+    """
+    name = ollama_model_name.lower()
+
+    # Remove hf.co/<user>/ prefix if present
+    if name.startswith('hf.co/'):
+        parts = name.split('/', 2)
+        if len(parts) >= 3:
+            name = parts[2]
+
+    # Remove :tag suffix if present
+    if ':' in name:
+        name = name.split(':')[0]
+
+    return name
+
+
+def update_mxfp4_configs(ollama_model_name: str):
+    """
+    Update harmony_models.yaml and custom_models.yaml for MXFP4 models.
+
+    After sync, finds the generated ls/ name by exact matching on the model slug,
+    then adds:
+    - Entry to harmony_models.yaml (if not present)
+    - Entry to custom_models.yaml with ollama_model mapping (if not present)
+    """
+    import yaml
+
+    # Load generated config to find the ls/ name for this model
+    config = load_config()
+    models = config.get('models', {})
+
+    # Load existing custom_models to check which already have mappings
+    custom_path = SCRIPT_DIR / 'custom_models.yaml'
+    custom_config = {}
+    if custom_path.exists():
+        with open(custom_path) as f:
+            custom_config = yaml.safe_load(f) or {}
+    custom_models = custom_config.get('models', {})
+
+    # Extract the slug from the Ollama model name for exact matching
+    # e.g., "hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest"
+    #    -> "gguf-mxfp4-gpt-oss-20b-derestricted"
+    ollama_slug = extract_ollama_slug(ollama_model_name)
+
+    # Find the ls/ name that contains this exact slug
+    ls_name = None
+    for name in models.keys():
+        if not is_mxfp4_model(name):
+            continue
+
+        # Strip ls/ prefix for the base name
+        base = name[3:] if name.startswith('ls/') else name
+
+        # Check if the config entry contains the Ollama slug (exact match)
+        # The config name is: slug + size suffix (e.g., "-20.9b-latest")
+        if ollama_slug in base.lower():
+            ls_name = base
+            break
+
+    if not ls_name:
+        print(f"Note: No config entry found matching slug '{ollama_slug}'")
+        print(f"  (Ollama model: {ollama_model_name})")
+        return
+
+    print(f"\n=== Updating MXFP4 configs for {ls_name} ===\n")
+
+    # Update harmony_models.yaml
+    harmony_path = SCRIPT_DIR / 'harmony_models.yaml'
+    harmony_config = {}
+    if harmony_path.exists():
+        with open(harmony_path) as f:
+            harmony_config = yaml.safe_load(f) or {}
+
+    harmony_models = harmony_config.get('harmony_models', [])
+    prefixed_name = f"ls/{ls_name}"
+    if prefixed_name not in harmony_models:
+        harmony_models.append(prefixed_name)
+        harmony_config['harmony_models'] = harmony_models
+        with open(harmony_path, 'w') as f:
+            yaml.dump(harmony_config, f, default_flow_style=False)
+        print(f"Added {prefixed_name} to harmony_models.yaml")
+    else:
+        print(f"{prefixed_name} already in harmony_models.yaml")
+
+    # Update custom_models.yaml
+    if ls_name not in custom_models:
+        custom_models[ls_name] = {}
+
+    if 'ollama_model' not in custom_models[ls_name]:
+        custom_models[ls_name]['ollama_model'] = ollama_model_name
+        # Add default settings for GPT-OSS/Harmony models
+        custom_models[ls_name].setdefault('sampler_args', '--temp 0.7 --top-p 0.95 --top-k 40')
+        custom_models[ls_name].setdefault('ctx_size', 65536)
+        custom_models[ls_name].setdefault('jinja', False)
+
+        custom_config['models'] = custom_models
+        with open(custom_path, 'w') as f:
+            yaml.dump(custom_config, f, default_flow_style=False, sort_keys=False)
+        print(f"Added {ls_name} with ollama_model mapping to custom_models.yaml")
+    else:
+        print(f"{ls_name} already has ollama_model mapping in custom_models.yaml")
+
+
 def cmd_pull(args: list[str]):
     """Handle pull command."""
     if not args:
@@ -311,6 +429,11 @@ def cmd_pull(args: list[str]):
         sys.exit(1)
 
     do_sync()
+
+    # For MXFP4 models, update harmony_models.yaml and custom_models.yaml
+    if is_mxfp4_model(model_name):
+        update_mxfp4_configs(model_name)
+
     print(f"\n=== Done! {model_name} is ready ===")
 
 
