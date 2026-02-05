@@ -585,17 +585,22 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
 
     if use_ollama:
         # Ollama backend - use /api/generate with raw mode
+        # CRITICAL: Override stop sequences - Ollama's default stops at Harmony tokens
+        # which breaks streaming. We need full Harmony output for parsing.
         backend_req = {
             "model": model,
             "prompt": harmony_prompt,
             "stream": True,
             "raw": True,  # Disable Ollama's chat templating
+            "options": {
+                "stop": [],  # Clear default Harmony stop tokens so we get full output
+            },
         }
         # Ollama uses different parameter names
         if "max_tokens" in body:
-            backend_req["options"] = {"num_predict": body["max_tokens"]}
+            backend_req["options"]["num_predict"] = body["max_tokens"]
         if "temperature" in body:
-            backend_req.setdefault("options", {})["temperature"] = body["temperature"]
+            backend_req["options"]["temperature"] = body["temperature"]
         url = f"{OLLAMA_BASE}/api/generate"
         logger.info(f"Routing MXFP4 model to Ollama: {url}")
     else:
