@@ -5,6 +5,7 @@ Tests for the Harmony proxy.
 import pytest
 from harmony_proxy import (
     is_harmony_model,
+    is_mxfp4_model,
     openai_messages_to_harmony,
     openai_tools_to_harmony,
     build_conversation,
@@ -32,6 +33,18 @@ class TestModelRouting:
         assert not is_harmony_model("qwen3-0.6b")
         assert not is_harmony_model("llama-3.1-8b")
         assert not is_harmony_model("gemma-2b")
+
+    def test_mxfp4_model_detected(self):
+        """MXFP4 models should be routed to Ollama."""
+        assert is_mxfp4_model("hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest")
+        assert is_mxfp4_model("gpt-oss-mxfp4-120b")
+        assert is_mxfp4_model("some-model-MXFP4-quantized")  # Case insensitive
+
+    def test_non_mxfp4_model_not_detected(self):
+        """Non-MXFP4 models should not be routed to Ollama."""
+        assert not is_mxfp4_model("ls/gpt-oss-20b-derestricted-gguf-20.9b-q8_0")
+        assert not is_mxfp4_model("llama-3.1-8b")
+        assert not is_mxfp4_model("qwen3-0.6b")
 
 
 class TestOpenAIToHarmonyConversion:

@@ -45,6 +45,14 @@ from openai_harmony import (
 LLAMA_SWAP_PORT = os.environ.get("LLAMA_SWAP_PORT", "5847")
 LLAMA_SWAP_BASE = os.environ.get("LLAMA_SWAP_BASE", f"http://127.0.0.1:{LLAMA_SWAP_PORT}")
 
+# Ollama backend for MXFP4 models (llama.cpp doesn't support MXFP4)
+OLLAMA_BASE = os.environ.get("OLLAMA_BASE", "http://localhost:11434")
+
+
+def is_mxfp4_model(model: str) -> bool:
+    """Check if model requires MXFP4 quantization (route to Ollama)."""
+    return "mxfp4" in model.lower()
+
 # Load Harmony models list from config
 # Model names must match llama-swap config.yaml exactly
 def load_harmony_models():
@@ -97,8 +105,13 @@ def log_request(endpoint: str, body: dict, source: str = "unknown"):
 
 
 def is_harmony_model(model: str) -> bool:
-    """Check if model requires Harmony encoding (O(1) lookup)."""
-    return model in HARMONY_MODELS
+    """Check if model requires Harmony encoding.
+
+    This includes:
+    - Models explicitly listed in HARMONY_MODELS
+    - MXFP4 models (GPT-OSS quantized with MXFP4, routed to Ollama)
+    """
+    return model in HARMONY_MODELS or is_mxfp4_model(model)
 
 
 # ============================================================================
@@ -554,9 +567,14 @@ async def proxy_openai_endpoint(path: str, body: dict, stream: bool):
 async def handle_chat_with_harmony(body: dict, stream: bool):
     """
     Handle chat completions for Harmony models (GPT-OSS).
-    Converts OpenAI format to Harmony, calls llama-swap, converts back.
+    Converts OpenAI format to Harmony, calls backend, converts back.
+
+    Routes to:
+    - Ollama for MXFP4 models (llama.cpp doesn't support MXFP4)
+    - llama-swap for all other Harmony models
     """
     model = body.get("model", "")
+    use_ollama = is_mxfp4_model(model)
 
     # Convert OpenAI request to Harmony format
     convo = build_conversation(body)
@@ -565,20 +583,33 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
     # Debug: log the Harmony prompt (first 500 chars)
     logger.debug(f"Harmony prompt (first 500 chars): {harmony_prompt[:500]}")
 
-    # Build request for llama-swap using /v1/completions endpoint
-    # We must use completions (not chat) to send raw Harmony prompt without templating
-    llama_req = {
-        "model": model,
-        "prompt": harmony_prompt,
-        "stream": True,  # Always stream from upstream
-    }
-
-    # Copy through other parameters
-    for key in ("max_tokens", "temperature", "top_p", "stop"):
-        if key in body:
-            llama_req[key] = body[key]
-
-    url = f"{LLAMA_SWAP_BASE}/v1/completions"
+    if use_ollama:
+        # Ollama backend - use /api/generate with raw mode
+        backend_req = {
+            "model": model,
+            "prompt": harmony_prompt,
+            "stream": True,
+            "raw": True,  # Disable Ollama's chat templating
+        }
+        # Ollama uses different parameter names
+        if "max_tokens" in body:
+            backend_req["options"] = {"num_predict": body["max_tokens"]}
+        if "temperature" in body:
+            backend_req.setdefault("options", {})["temperature"] = body["temperature"]
+        url = f"{OLLAMA_BASE}/api/generate"
+        logger.info(f"Routing MXFP4 model to Ollama: {url}")
+    else:
+        # llama-swap backend - use /v1/completions
+        backend_req = {
+            "model": model,
+            "prompt": harmony_prompt,
+            "stream": True,  # Always stream from upstream
+        }
+        # Copy through other parameters
+        for key in ("max_tokens", "temperature", "top_p", "stop"):
+            if key in body:
+                backend_req[key] = body[key]
+        url = f"{LLAMA_SWAP_BASE}/v1/completions"
 
     if stream:
         # Streaming response - client must be created inside generator
@@ -596,7 +627,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
 
             logger.info(f"Starting streaming request to {url}")
             async with httpx.AsyncClient(timeout=None) as client:
-                async with client.stream("POST", url, json=llama_req, timeout=None) as resp:
+                async with client.stream("POST", url, json=backend_req, timeout=None) as resp:
                     logger.info(f"Upstream response status: {resp.status_code}")
 
                     # Handle upstream errors (e.g., context length exceeded)
@@ -630,21 +661,58 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                         return
 
                     async for line in resp.aiter_lines():
-                        if not line.startswith("data: "):
+                        if not line:
                             continue
-                        data = line[6:]
-                        if data == "[DONE]":
-                            break
 
-                        try:
-                            chunk = json.loads(data)
-                            chunks_received += 1
-                            # completions endpoint uses 'text', not 'delta.content'
-                            content = chunk.get("choices", [{}])[0].get("text", "")
-                            if content:
-                                accumulated_raw.append(content)
-                                if harmony_parse_failed:
-                                    # After parse failure, stream raw content
+                        # Parse line based on backend format
+                        if use_ollama:
+                            # Ollama: NDJSON format {"response": "...", "done": false}
+                            try:
+                                chunk = json.loads(line)
+                                if chunk.get("done"):
+                                    break
+                                content = chunk.get("response", "")
+                            except json.JSONDecodeError:
+                                continue
+                        else:
+                            # llama-swap: SSE format "data: {...}"
+                            if not line.startswith("data: "):
+                                continue
+                            data = line[6:]
+                            if data == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data)
+                                content = chunk.get("choices", [{}])[0].get("text", "")
+                            except json.JSONDecodeError:
+                                continue
+
+                        chunks_received += 1
+                        if content:
+                            accumulated_raw.append(content)
+                            if harmony_parse_failed:
+                                # After parse failure, stream raw content
+                                raw_chunk = {
+                                    "id": chunk_id,
+                                    "object": "chat.completion.chunk",
+                                    "model": model,
+                                    "choices": [{"index": 0, "delta": {"content": content}}],
+                                }
+                                yield f"data: {json.dumps(raw_chunk)}\n\n"
+                            else:
+                                try:
+                                    tokens = ENC.encode(content, allowed_special='all')
+                                    for token in tokens:
+                                        parser.process(token)
+                                        deltas = harmony_state_to_openai_deltas(parser, model, state, chunk_id, created)
+                                        for delta in deltas:
+                                            deltas_emitted += 1
+                                            yield f"data: {json.dumps(delta)}\n\n"
+                                except Exception as e:
+                                    logger.warning(f"Harmony parse error in stream, falling back to raw: {e}")
+                                    logger.debug(f"Raw content that failed Harmony parse: {content[:200]}")
+                                    harmony_parse_failed = True
+                                    # Yield current content as raw
                                     raw_chunk = {
                                         "id": chunk_id,
                                         "object": "chat.completion.chunk",
@@ -652,29 +720,6 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                                         "choices": [{"index": 0, "delta": {"content": content}}],
                                     }
                                     yield f"data: {json.dumps(raw_chunk)}\n\n"
-                                else:
-                                    try:
-                                        tokens = ENC.encode(content, allowed_special='all')
-                                        for token in tokens:
-                                            parser.process(token)
-                                            deltas = harmony_state_to_openai_deltas(parser, model, state, chunk_id, created)
-                                            for delta in deltas:
-                                                deltas_emitted += 1
-                                                yield f"data: {json.dumps(delta)}\n\n"
-                                    except Exception as e:
-                                        logger.warning(f"Harmony parse error in stream, falling back to raw: {e}")
-                                        logger.debug(f"Raw content that failed Harmony parse: {content[:200]}")
-                                        harmony_parse_failed = True
-                                        # Yield current content as raw
-                                        raw_chunk = {
-                                            "id": chunk_id,
-                                            "object": "chat.completion.chunk",
-                                            "model": model,
-                                            "choices": [{"index": 0, "delta": {"content": content}}],
-                                        }
-                                        yield f"data: {json.dumps(raw_chunk)}\n\n"
-                        except json.JSONDecodeError:
-                            continue
 
             # Finalize parsing by sending <|end|> if we're still in Harmony mode
             if not harmony_parse_failed:
@@ -778,7 +823,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
         harmony_parse_failed = False
 
         async with httpx.AsyncClient(timeout=None) as client:
-            async with client.stream("POST", url, json=llama_req, timeout=None) as resp:
+            async with client.stream("POST", url, json=backend_req, timeout=None) as resp:
                 # Handle upstream errors (e.g., context length exceeded)
                 if resp.status_code != 200:
                     error_body = await resp.aread()
@@ -801,28 +846,42 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                     )
 
                 async for line in resp.aiter_lines():
-                    if not line.startswith("data: "):
+                    if not line:
                         continue
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
 
-                    try:
-                        chunk = json.loads(data)
-                        # completions endpoint uses 'text', not 'delta.content'
-                        content = chunk.get("choices", [{}])[0].get("text", "")
-                        if content:
-                            raw_content.append(content)
-                            if not harmony_parse_failed:
-                                try:
-                                    tokens = ENC.encode(content, allowed_special='all')
-                                    for token in tokens:
-                                        parser.process(token)
-                                except Exception as e:
-                                    logger.warning(f"Harmony parse error, falling back to raw: {e}")
-                                    harmony_parse_failed = True
-                    except json.JSONDecodeError:
-                        continue
+                    # Parse line based on backend format
+                    if use_ollama:
+                        # Ollama: NDJSON format {"response": "...", "done": false}
+                        try:
+                            chunk = json.loads(line)
+                            if chunk.get("done"):
+                                break
+                            content = chunk.get("response", "")
+                        except json.JSONDecodeError:
+                            continue
+                    else:
+                        # llama-swap: SSE format "data: {...}"
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:]
+                        if data == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data)
+                            content = chunk.get("choices", [{}])[0].get("text", "")
+                        except json.JSONDecodeError:
+                            continue
+
+                    if content:
+                        raw_content.append(content)
+                        if not harmony_parse_failed:
+                            try:
+                                tokens = ENC.encode(content, allowed_special='all')
+                                for token in tokens:
+                                    parser.process(token)
+                            except Exception as e:
+                                logger.warning(f"Harmony parse error, falling back to raw: {e}")
+                                harmony_parse_failed = True
 
         if harmony_parse_failed:
             # Return raw content as plain response
