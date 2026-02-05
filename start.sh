@@ -23,6 +23,7 @@ else
 fi
 
 LLAMA_SWAP_PORT="${LLAMA_SWAP_PORT:-5847}"
+HARMONY_PROXY_PORT="${HARMONY_PROXY_PORT:-5846}"
 
 # Find llama-swap (prefer system install, fallback to local bin)
 find_llama_swap() {
@@ -64,7 +65,7 @@ check_deps() {
 
 # Check Python dependencies
 check_python_deps() {
-    python3 -c "import requests, psutil" 2>/dev/null || {
+    python3 -c "import requests, psutil, fastapi, uvicorn, openai_harmony" 2>/dev/null || {
         echo "Installing Python dependencies..."
         pip3 install -r requirements.txt
     }
@@ -92,9 +93,21 @@ start_sync_loop() {
     echo "Sync loop PID: $SYNC_PID"
 }
 
+start_harmony_proxy() {
+    echo "Starting Harmony proxy on port ${HARMONY_PROXY_PORT}..."
+    LLAMA_SWAP_BASE="http://127.0.0.1:${LLAMA_SWAP_PORT}" \
+        uvicorn harmony_proxy:app --host 0.0.0.0 --port "${HARMONY_PROXY_PORT}" &
+    HARMONY_PROXY_PID=$!
+    echo "Harmony proxy PID: $HARMONY_PROXY_PID"
+}
+
 cleanup() {
     echo ""
     echo "Shutting down..."
+
+    if [ -n "$HARMONY_PROXY_PID" ]; then
+        kill $HARMONY_PROXY_PID 2>/dev/null || true
+    fi
 
     if [ -n "$LLAMA_SWAP_PID" ]; then
         kill $LLAMA_SWAP_PID 2>/dev/null || true
@@ -142,17 +155,23 @@ for i in {1..30}; do
     sleep 1
 done
 
+start_harmony_proxy
 start_pressure_unloader
 start_sync_loop
 
 echo ""
 echo "=== All services started ==="
-echo "API endpoint: http://127.0.0.1:${LLAMA_SWAP_PORT}"
+echo ""
+echo "API endpoint: http://127.0.0.1:${HARMONY_PROXY_PORT}"
+echo "(Harmony proxy for GPT-OSS support, forwards to llama-swap)"
+echo ""
+echo "Direct llama-swap: http://127.0.0.1:${LLAMA_SWAP_PORT}"
 echo ""
 echo "Endpoints:"
 echo "  POST /v1/chat/completions - Chat completion (OpenAI compatible)"
-echo "  GET  /running             - List loaded models"
-echo "  POST /models/unload       - Unload a model"
+echo "  POST /v1/messages         - Anthropic Messages API"
+echo "  GET  /v1/models           - List available models"
+echo "  GET  /health              - Proxy health check"
 echo ""
 echo "Press Ctrl+C to stop all services"
 

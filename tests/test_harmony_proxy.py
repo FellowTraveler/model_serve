@@ -1,0 +1,159 @@
+"""
+Tests for the Harmony proxy.
+"""
+
+import pytest
+from harmony_proxy import (
+    is_harmony_model,
+    openai_messages_to_harmony,
+    openai_tools_to_harmony,
+    build_conversation,
+    render_harmony_prompt,
+    HarmonySessionState,
+    HarmonyAccumulated,
+    harmony_state_to_openai_deltas,
+    harmony_state_to_openai_final,
+    ENC,
+    HARMONY_MODELS,
+)
+from openai_harmony import StreamableParser, Role
+
+
+class TestModelRouting:
+    """Test model routing logic."""
+
+    def test_harmony_model_detected(self):
+        """Harmony models should be detected."""
+        for model in HARMONY_MODELS:
+            assert is_harmony_model(model), f"{model} should be detected as Harmony"
+
+    def test_non_harmony_model_not_detected(self):
+        """Non-Harmony models should not be detected."""
+        assert not is_harmony_model("qwen3-0.6b")
+        assert not is_harmony_model("llama-3.1-8b")
+        assert not is_harmony_model("gemma-2b")
+
+
+class TestOpenAIToHarmonyConversion:
+    """Test OpenAI to Harmony format conversion."""
+
+    def test_basic_message_conversion(self):
+        """Basic messages should convert correctly."""
+        messages = [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "Hello"},
+        ]
+        harmony_msgs = openai_messages_to_harmony(messages)
+        assert len(harmony_msgs) == 2
+        assert harmony_msgs[0].author.role == Role.SYSTEM
+        assert harmony_msgs[1].author.role == Role.USER
+
+    def test_tool_conversion(self):
+        """OpenAI tools should convert to Harmony ToolDescription."""
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get weather",
+                    "parameters": {"type": "object"},
+                },
+            }
+        ]
+        harmony_tools = openai_tools_to_harmony(tools)
+        assert len(harmony_tools) == 1
+        assert harmony_tools[0].name == "get_weather"
+
+    def test_build_conversation_with_tools(self):
+        """Conversation with tools should include tool definitions."""
+        body = {
+            "messages": [{"role": "user", "content": "What's the weather?"}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "get_weather", "description": "Get weather"},
+                }
+            ],
+        }
+        convo = build_conversation(body)
+        assert len(convo.messages) >= 1
+
+    def test_render_harmony_prompt(self):
+        """Rendered prompt should contain Harmony tokens."""
+        body = {"messages": [{"role": "user", "content": "Hello"}]}
+        convo = build_conversation(body)
+        prompt = render_harmony_prompt(convo)
+        assert "<|start|>" in prompt
+        assert "<|message|>" in prompt
+        assert "Hello" in prompt
+
+
+class TestHarmonyToOpenAIConversion:
+    """Test Harmony to OpenAI format conversion."""
+
+    def test_streaming_drops_analysis_channel(self):
+        """Analysis channel should be dropped in streaming output."""
+        parser = StreamableParser(ENC, role=Role.ASSISTANT)
+        state = HarmonySessionState()
+
+        # Simulate analysis channel token
+        harmony = "<|channel|>analysis<|message|>thinking...<|end|>"
+        tokens = ENC.encode(harmony, allowed_special="all")
+        for token in tokens:
+            parser.process(token)
+            deltas = harmony_state_to_openai_deltas(parser, "test-model", state)
+            # Analysis should produce no deltas
+            for d in deltas:
+                assert "analysis" not in str(d)
+
+    def test_final_channel_produces_content(self):
+        """Final channel should produce content deltas."""
+        parser = StreamableParser(ENC, role=Role.ASSISTANT)
+        state = HarmonySessionState()
+
+        harmony = "<|channel|>final<|message|>Hello world<|end|>"
+        tokens = ENC.encode(harmony, allowed_special="all")
+
+        all_deltas = []
+        for token in tokens:
+            parser.process(token)
+            deltas = harmony_state_to_openai_deltas(parser, "test-model", state)
+            all_deltas.extend(deltas)
+
+        # Should have content deltas
+        content_deltas = [d for d in all_deltas if "content" in d.get("choices", [{}])[0].get("delta", {})]
+        assert len(content_deltas) > 0
+
+    def test_tool_call_extraction(self):
+        """Tool calls should be extracted correctly."""
+        parser = StreamableParser(ENC, role=Role.ASSISTANT)
+
+        harmony = '<|channel|>commentary to=functions.get_weather<|constrain|>json<|message|>{"location":"NYC"}<|call|>'
+        tokens = ENC.encode(harmony, allowed_special="all")
+        for token in tokens:
+            parser.process(token)
+
+        acc = HarmonyAccumulated()
+        acc.add_from_parser(parser)
+
+        assert len(acc.tool_calls) == 1
+        fn_name, args = acc.tool_calls[0]
+        assert fn_name == "get_weather"
+        assert "NYC" in args
+
+    def test_non_streaming_final_response(self):
+        """Non-streaming response should have correct format."""
+        acc = HarmonyAccumulated()
+        acc.final_content = ["Hello ", "world"]
+        acc.tool_calls = [("test_fn", '{"arg": "value"}')]
+
+        response = harmony_state_to_openai_final(acc, "test-model")
+
+        assert response["object"] == "chat.completion"
+        assert response["choices"][0]["message"]["content"] == "Hello world"
+        assert response["choices"][0]["finish_reason"] == "tool_calls"
+        assert len(response["choices"][0]["message"]["tool_calls"]) == 1
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
