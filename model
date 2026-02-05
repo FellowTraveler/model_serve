@@ -332,16 +332,17 @@ def update_mxfp4_configs(ollama_model_name: str):
     """
     Update harmony_models.yaml and custom_models.yaml for MXFP4 models.
 
-    After sync, finds the generated ls/ name by exact matching on the model slug,
+    After sync, finds the generated model_serve name by exact matching on the model slug,
     then adds:
     - Entry to harmony_models.yaml (if not present)
     - Entry to custom_models.yaml with ollama_model mapping (if not present)
     """
     import yaml
 
-    # Load generated config to find the ls/ name for this model
+    # Load generated config to find the model_serve name for this model
     config = load_config()
     models = config.get('models', {})
+    prefix = os.environ.get('MODEL_PREFIX', 'ms/')
 
     # Load existing custom_models to check which already have mappings
     custom_path = SCRIPT_DIR / 'custom_models.yaml'
@@ -356,27 +357,27 @@ def update_mxfp4_configs(ollama_model_name: str):
     #    -> "gguf-mxfp4-gpt-oss-20b-derestricted"
     ollama_slug = extract_ollama_slug(ollama_model_name)
 
-    # Find the ls/ name that contains this exact slug
-    ls_name = None
+    # Find the model_serve name that contains this exact slug
+    base_model_name = None
     for name in models.keys():
         if not is_mxfp4_model(name):
             continue
 
-        # Strip ls/ prefix for the base name
-        base = name[3:] if name.startswith('ls/') else name
+        # Strip prefix for the base name
+        base = name[len(prefix):] if name.startswith(prefix) else name
 
         # Check if the config entry contains the Ollama slug (exact match)
         # The config name is: slug + size suffix (e.g., "-20.9b-latest")
         if ollama_slug in base.lower():
-            ls_name = base
+            base_model_name = base
             break
 
-    if not ls_name:
+    if not base_model_name:
         print(f"Note: No config entry found matching slug '{ollama_slug}'")
         print(f"  (Ollama model: {ollama_model_name})")
         return
 
-    print(f"\n=== Updating MXFP4 configs for {ls_name} ===\n")
+    print(f"\n=== Updating MXFP4 configs for {base_model_name} ===\n")
 
     # Update harmony_models.yaml
     harmony_path = SCRIPT_DIR / 'harmony_models.yaml'
@@ -386,7 +387,7 @@ def update_mxfp4_configs(ollama_model_name: str):
             harmony_config = yaml.safe_load(f) or {}
 
     harmony_models = harmony_config.get('harmony_models', [])
-    prefixed_name = f"ls/{ls_name}"
+    prefixed_name = f"{prefix}{base_model_name}"
     if prefixed_name not in harmony_models:
         harmony_models.append(prefixed_name)
         harmony_config['harmony_models'] = harmony_models
@@ -397,22 +398,22 @@ def update_mxfp4_configs(ollama_model_name: str):
         print(f"{prefixed_name} already in harmony_models.yaml")
 
     # Update custom_models.yaml
-    if ls_name not in custom_models:
-        custom_models[ls_name] = {}
+    if base_model_name not in custom_models:
+        custom_models[base_model_name] = {}
 
-    if 'ollama_model' not in custom_models[ls_name]:
-        custom_models[ls_name]['ollama_model'] = ollama_model_name
+    if 'ollama_model' not in custom_models[base_model_name]:
+        custom_models[base_model_name]['ollama_model'] = ollama_model_name
         # Add default settings for GPT-OSS/Harmony models
-        custom_models[ls_name].setdefault('sampler_args', '--temp 0.7 --top-p 0.95 --top-k 40')
-        custom_models[ls_name].setdefault('ctx_size', 65536)
-        custom_models[ls_name].setdefault('jinja', False)
+        custom_models[base_model_name].setdefault('sampler_args', '--temp 0.7 --top-p 0.95 --top-k 40')
+        custom_models[base_model_name].setdefault('ctx_size', 65536)
+        custom_models[base_model_name].setdefault('jinja', False)
 
         custom_config['models'] = custom_models
         with open(custom_path, 'w') as f:
             yaml.dump(custom_config, f, default_flow_style=False, sort_keys=False)
-        print(f"Added {ls_name} with ollama_model mapping to custom_models.yaml")
+        print(f"Added {base_model_name} with ollama_model mapping to custom_models.yaml")
     else:
-        print(f"{ls_name} already has ollama_model mapping in custom_models.yaml")
+        print(f"{base_model_name} already has ollama_model mapping in custom_models.yaml")
 
 
 def cmd_pull(args: list[str]):
@@ -519,7 +520,7 @@ def cmd_names(args: list[str]):
         print("No models in config.yaml. Run './model sync' first.")
         return
 
-    prefix = os.environ.get('MODEL_PREFIX', 'ls/')
+    prefix = os.environ.get('MODEL_PREFIX', 'ms/')
 
     # Group models by family (first part of name before colon or dash)
     families = {}
@@ -561,7 +562,7 @@ def cmd_names(args: list[str]):
             count += 1
 
     print(f"\n({count} models" + (f" matching '{filter_term}'" if filter_term else "") + ")")
-    print("\nUse these names in API requests and custom_models.yaml (without ls/ prefix for yaml)")
+    print(f"\nUse these names in API requests and custom_models.yaml (without {prefix} prefix for yaml)")
 
 
 def cmd_show(args: list[str]):

@@ -1,5 +1,6 @@
 harmony_models:
-- ls/gpt-oss-120b-derestricted-gguf-117b-latest
-- ls/gpt-oss-20b-derestricted-gguf-20.9b-q8_0
-- ls/gpt-oss-20b-gguf-20.9b-q8_k_xl
-- ls/gpt-oss-120b-derestricted.mxfp4_moe-gguf-117b-latest
+- ms/gpt-oss-120b-derestricted-gguf-117b-latest
+- ms/gpt-oss-20b-derestricted-gguf-20.9b-q8_0
+- ms/gpt-oss-20b-gguf-20.9b-q8_k_xl
+- ms/gpt-oss-120b-derestricted.mxfp4_moe-gguf-117b-latest
+- ms/gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest

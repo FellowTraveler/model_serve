@@ -48,6 +48,9 @@ LLAMA_SWAP_BASE = os.environ.get("LLAMA_SWAP_BASE", f"http://127.0.0.1:{LLAMA_SW
 # Ollama backend for MXFP4 models (llama.cpp doesn't support MXFP4)
 OLLAMA_BASE = os.environ.get("OLLAMA_BASE", "http://localhost:11434")
 
+# Model name prefix (ms/ = model_serve)
+MODEL_PREFIX = os.environ.get("MODEL_PREFIX", "ms/")
+
 
 def is_mxfp4_model(model: str) -> bool:
     """Check if model requires MXFP4 quantization (route to Ollama)."""
@@ -97,10 +100,10 @@ def get_ollama_model_name(model: str) -> str:
     """
     Translate model name to Ollama model name if mapping exists.
 
-    Handles both prefixed (ls/model-name) and unprefixed (model-name) formats.
+    Handles both prefixed (ms/model-name) and unprefixed (model-name) formats.
     """
-    # Strip ls/ prefix if present
-    base_name = model[3:] if model.startswith("ls/") else model
+    # Strip model prefix if present
+    base_name = model[len(MODEL_PREFIX):] if model.startswith(MODEL_PREFIX) else model
 
     # Check if there's a custom config with ollama_model mapping
     if base_name in CUSTOM_MODELS:
@@ -626,7 +629,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
         # Ollama backend - use /api/generate with raw mode
         # CRITICAL: Override stop sequences - Ollama's default stops at Harmony tokens
         # which breaks streaming. We need full Harmony output for parsing.
-        # Translate model name to Ollama name (ls/name -> hf.co/... mapping)
+        # Translate model name to Ollama name (ms/name -> hf.co/... mapping)
         ollama_model = get_ollama_model_name(model)
         backend_req = {
             "model": ollama_model,

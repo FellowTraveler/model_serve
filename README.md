@@ -122,8 +122,8 @@ The `stats` command shows all loaded models with context size, slots, state, and
 ======================================================================
 MODEL                                              CTX  SLOTS    STATE
 ======================================================================
-ls/gemma3:27.4b-q8_0                            32,768      1    ready
-ls/codestral:22.2b-q8_0                         32,768      1    ready
+ms/gemma3:27.4b-q8_0                            32,768      1    ready
+ms/codestral:22.2b-q8_0                         32,768      1    ready
 ======================================================================
 TOTAL                                           65,536      2
 
@@ -138,13 +138,13 @@ Connect to port 5846 (Harmony proxy) for all models. The proxy handles Harmony e
 # Chat completion (OpenAI-compatible) - works with any model
 curl http://127.0.0.1:5846/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "ls/gemma3:12.2b-q8_0", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "ms/gemma3:12.2b-q8_0", "messages": [{"role": "user", "content": "Hello"}]}'
 
 # GPT-OSS models work the same way - Harmony handled automatically
 # Tool calls are fully supported for agentic workflows
 curl http://127.0.0.1:5846/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "ls/gpt-oss-20b-derestricted-gguf-20.9b-q8_0", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "ms/gpt-oss-20b-derestricted-gguf-20.9b-q8_0", "messages": [{"role": "user", "content": "Hello"}]}'
 
 # MXFP4 models route to Ollama automatically (llama.cpp doesn't support MXFP4)
 curl http://127.0.0.1:5846/v1/chat/completions \
@@ -159,7 +159,7 @@ curl http://127.0.0.1:5846/health
 
 # Direct llama-swap access (port 5847) - for debugging only
 curl http://127.0.0.1:5847/running
-curl -X POST "http://127.0.0.1:5847/unload?model=ls/gemma3:12.2b-q8_0"
+curl -X POST "http://127.0.0.1:5847/unload?model=ms/gemma3:12.2b-q8_0"
 ```
 
 ## Configuration
@@ -177,7 +177,7 @@ curl -X POST "http://127.0.0.1:5847/unload?model=ls/gemma3:12.2b-q8_0"
 | `MIN_MODEL_AGE_SECONDS` | 5 | Minimum idle time before a model can be unloaded (protects recently-used models) |
 | `MODELS_DIR` | ~/.cache/lm-studio/models | Where model symlinks are created (see below) |
 | `BRIDGE_SCRIPT` | (bundled) | Path to lm-studio-ollama-bridge (uses submodule by default) |
-| `MODEL_PREFIX` | `ls/` | Prefix for model names to distinguish from Ollama in Open WebUI |
+| `MODEL_PREFIX` | `ms/` | Prefix for model names to distinguish from Ollama in Open WebUI |
 | `DEFAULT_CTX_SIZE` | 8192 | Default context size for models without custom settings |
 | `DEFAULT_PARALLEL` | 1 | Slots per model (1 = single-user, saves memory; 4 = multi-user) |
 | `BRIDGE_SYNC_INTERVAL` | 3600 | Seconds between automatic syncs (when using start.sh) |
@@ -201,8 +201,8 @@ MODELS_DIR/
 
 ### Model Naming
 
-Models are prefixed with `ls/` by default so you can distinguish them from Ollama models in Open WebUI:
-- **llama-swap**: `ls/gemma3:12.2b-q8_0`
+Models are prefixed with `ms/` (model_serve) by default so you can distinguish them from Ollama models in Open WebUI:
+- **model_serve**: `ms/gemma3:12.2b-q8_0`
 - **Ollama**: `hf.co/mradermacher/Gemma-3-27B-Derestricted-GGUF:q8_0`
 
 Change the prefix in `.env` by setting `MODEL_PREFIX` (or set to empty to disable).
@@ -215,13 +215,13 @@ Edit `custom_models.yaml` to configure per-model settings:
 
 ```yaml
 models:
-  # Use model name WITHOUT the ls/ prefix (use ./model names to find names)
+  # Use model name WITHOUT the ms/ prefix (use ./model names to find names)
   # Standard settings
   gemma3:12.2b-q8_0:
     sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 1.0"
     ctx_size: 32768
 
-  # Alias: same model file, different settings (appears as ls/gemma3-creative)
+  # Alias: same model file, different settings (appears as ms/gemma3-creative)
   # Useful for having "creative" vs "precise" variants of the same model
   gemma3-creative:
     base_model: gemma3:12.2b-q8_0

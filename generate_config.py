@@ -24,7 +24,7 @@ def get_config():
         'model_ttl': int(os.environ.get('MODEL_TTL', '1800')),
         'default_ctx_size': int(os.environ.get('DEFAULT_CTX_SIZE', '8192')),
         'default_parallel': int(os.environ.get('DEFAULT_PARALLEL', '1')),  # Slots per model
-        'model_prefix': os.environ.get('MODEL_PREFIX', 'ls/'),  # Prefix to distinguish from Ollama
+        'model_prefix': os.environ.get('MODEL_PREFIX', 'ms/'),  # Prefix to distinguish from Ollama
     }
 
 

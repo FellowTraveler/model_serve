@@ -43,23 +43,23 @@ class TestModelRouting:
 
     def test_non_mxfp4_model_not_detected(self):
         """Non-MXFP4 models should not be routed to Ollama."""
-        assert not is_mxfp4_model("ls/gpt-oss-20b-derestricted-gguf-20.9b-q8_0")
+        assert not is_mxfp4_model("ms/gpt-oss-20b-derestricted-gguf-20.9b-q8_0")
         assert not is_mxfp4_model("llama-3.1-8b")
         assert not is_mxfp4_model("qwen3-0.6b")
 
     def test_ollama_model_name_mapping(self):
         """MXFP4 model names should be translated to Ollama names."""
-        # With ls/ prefix
-        mapped = get_ollama_model_name("ls/gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
+        # With ms/ prefix
+        mapped = get_ollama_model_name("ms/gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
         assert mapped == "hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest"
 
-        # Without ls/ prefix
+        # Without ms/ prefix
         mapped = get_ollama_model_name("gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
         assert mapped == "hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest"
 
         # Unknown model returns original
-        mapped = get_ollama_model_name("ls/some-unknown-model")
-        assert mapped == "ls/some-unknown-model"
+        mapped = get_ollama_model_name("ms/some-unknown-model")
+        assert mapped == "ms/some-unknown-model"
 
 
 class TestOpenAIToHarmonyConversion:
