@@ -96,7 +96,7 @@ start_sync_loop() {
 start_harmony_proxy() {
     echo "Starting Harmony proxy on port ${HARMONY_PROXY_PORT}..."
     LLAMA_SWAP_BASE="http://127.0.0.1:${LLAMA_SWAP_PORT}" \
-        uvicorn harmony_proxy:app --host 0.0.0.0 --port "${HARMONY_PROXY_PORT}" &
+        python3 -m uvicorn harmony_proxy:app --host 0.0.0.0 --port "${HARMONY_PROXY_PORT}" &
     HARMONY_PROXY_PID=$!
     echo "Harmony proxy PID: $HARMONY_PROXY_PID"
 }
