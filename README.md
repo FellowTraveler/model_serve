@@ -19,9 +19,10 @@ Works on **macOS** (Intel and Apple Silicon) and **Linux**.
 ## Features
 
 - **Single API endpoint** - All models accessible via one port (OpenAI-compatible)
-- **GPT-OSS Harmony support** - Automatic Harmony encoding/decoding for GPT-OSS models
+- **GPT-OSS Harmony support** - Automatic Harmony encoding/decoding for GPT-OSS models, including tool calls
+- **MXFP4 model support** - Models with MXFP4 quantization automatically route to Ollama (llama.cpp doesn't support MXFP4)
 - **On-demand loading** - Models load when first requested, not at startup
-- **Auto-unload** - Models unload after idle timeout (TTL) or memory pressure
+- **LRU-based auto-unload** - Models unload after idle timeout (TTL) or memory pressure, with least-recently-used priority
 - **Ollama integration** - Pull/remove models with automatic config sync
 - **LM Studio integration** - (Optional) Ollama models are symlinked into LM Studio
 - **Advanced samplers** - Per-model min-p, top-n-sigma (top-σ), temperature, ctx_size
@@ -78,6 +79,8 @@ git submodule update --init --recursive
 ```
 
 The Harmony proxy listens on port 5846 by default - this is the client-facing endpoint. All clients should connect here regardless of model. The proxy automatically handles Harmony encoding/decoding for GPT-OSS models and passes through all other models unchanged.
+
+**MXFP4 Models:** Models with "MXFP4" in the name (case-insensitive) are automatically routed to Ollama instead of llama-swap, since llama.cpp doesn't support MXFP4 quantization. This happens transparently - just use the model name as usual.
 
 ### Model Management
 
@@ -138,9 +141,15 @@ curl http://127.0.0.1:5846/v1/chat/completions \
   -d '{"model": "ls/gemma3:12.2b-q8_0", "messages": [{"role": "user", "content": "Hello"}]}'
 
 # GPT-OSS models work the same way - Harmony handled automatically
+# Tool calls are fully supported for agentic workflows
 curl http://127.0.0.1:5846/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "ls/gpt-oss-20b-derestricted-gguf-20.9b-q8_0", "messages": [{"role": "user", "content": "Hello"}]}'
+
+# MXFP4 models route to Ollama automatically (llama.cpp doesn't support MXFP4)
+curl http://127.0.0.1:5846/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest", "messages": [{"role": "user", "content": "Hello"}]}'
 
 # List available models
 curl http://127.0.0.1:5846/v1/models
@@ -161,15 +170,18 @@ curl -X POST "http://127.0.0.1:5847/unload?model=ls/gemma3:12.2b-q8_0"
 |----------|---------|-------------|
 | `HARMONY_PROXY_PORT` | 5846 | Client-facing API port (connects here) |
 | `LLAMA_SWAP_PORT` | 5847 | Internal llama-swap port (proxy forwards here) |
+| `OLLAMA_BASE` | http://localhost:11434 | Ollama backend URL for MXFP4 models |
 | `MODEL_TTL` | 1800 | Idle timeout in seconds (30 min) |
 | `MEMORY_PRESSURE_THRESHOLD` | 75 | Memory % to trigger auto-unload (increase to 85+ for 128GB systems) |
 | `PRESSURE_CHECK_INTERVAL` | 30 | Seconds between memory pressure checks |
+| `MIN_MODEL_AGE_SECONDS` | 5 | Minimum idle time before a model can be unloaded (protects recently-used models) |
 | `MODELS_DIR` | ~/.cache/lm-studio/models | Where model symlinks are created (see below) |
 | `BRIDGE_SCRIPT` | (bundled) | Path to lm-studio-ollama-bridge (uses submodule by default) |
 | `MODEL_PREFIX` | `ls/` | Prefix for model names to distinguish from Ollama in Open WebUI |
 | `DEFAULT_CTX_SIZE` | 8192 | Default context size for models without custom settings |
 | `DEFAULT_PARALLEL` | 1 | Slots per model (1 = single-user, saves memory; 4 = multi-user) |
 | `BRIDGE_SYNC_INTERVAL` | 3600 | Seconds between automatic syncs (when using start.sh) |
+| `HARMONY_MODELS_CONFIG` | harmony_models.yaml | Path to Harmony models config file |
 
 ### Models Directory Structure
 
@@ -298,9 +310,13 @@ The cron job runs `./model start` hourly. If the server is already running, it e
 1. **Ollama** downloads and manages model files (stored as blobs)
 2. **lm-studio-ollama-bridge** (bundled) creates symlinks in `MODELS_DIR` pointing to Ollama blobs
 3. **generate_config.py** scans `MODELS_DIR` for GGUF files, merges custom settings, creates `config.yaml`
-4. **llama-swap** routes API requests to the right model, spawning llama-server instances on demand
-5. **pressure_unloader.py** monitors memory and unloads idle models when pressure is high
-6. **sync_loop.sh** periodically re-syncs models and restarts llama-swap if config changed
+4. **harmony_proxy.py** receives all API requests on port 5846:
+   - GPT-OSS models: Harmony encoding/decoding with tool call support
+   - MXFP4 models: Routes to Ollama (llama.cpp doesn't support MXFP4)
+   - Other models: Passes through to llama-swap unchanged
+5. **llama-swap** routes requests to the right model, spawning llama-server instances on demand
+6. **pressure_unloader.py** monitors memory and unloads idle models using LRU (least recently used) strategy across both llama-swap and Ollama backends
+7. **sync_loop.sh** periodically re-syncs models and restarts llama-swap if config changed
 
 ## File Structure
 
@@ -313,10 +329,12 @@ model_serve/
 ├── install.sh                 # Install dependencies
 ├── setup_service.sh           # Install as system service (launchd/systemd)
 ├── setup_cron.sh              # Cron-based keep-alive (fallback)
+├── harmony_proxy.py           # Client-facing proxy (Harmony, MXFP4 routing, tool calls)
 ├── generate_config.py         # Discover models → config.yaml
 ├── sync_bridge.sh             # Sync wrapper with PATH setup (used by sync_loop.sh)
 ├── sync_loop.sh               # Periodic sync loop (used by start.sh)
-├── pressure_unloader.py       # Memory pressure monitor
+├── pressure_unloader.py       # LRU-based memory pressure monitor (llama-swap + Ollama)
+├── harmony_models.yaml        # List of models requiring Harmony encoding
 ├── lm-studio-ollama-bridge/   # Submodule: Ollama-LM Studio sync tool
 ├── config.yaml                # Auto-generated llama-swap config (git-ignored)
 ├── custom_models.yaml         # Your custom model settings
