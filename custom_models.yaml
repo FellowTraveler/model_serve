@@ -1,19 +1,24 @@
 models:
+  gpt-oss-120b-derestricted.mxfp4_moe-gguf-117b-latest:
+    ollama_model: hf.co/gghfez/gpt-oss-120b-Derestricted.MXFP4_MOE-gguf:latest
+    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1 --repeat-last-n 64
+    ctx_size: 65536
+    jinja: false
   gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest:
     ollama_model: hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest
-    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40
+    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1 --repeat-last-n 64
     ctx_size: 65536
     jinja: false
   gpt-oss-120b-derestricted-gguf-117b-latest:
-    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40
+    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1 --repeat-last-n 64
     ctx_size: 65536
     jinja: false
   gpt-oss-20b-derestricted-gguf-20.9b-q8_0:
-    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40
+    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1 --repeat-last-n 64
     ctx_size: 65536
     jinja: false
   gpt-oss-20b-gguf-20.9b-q8_k_xl:
-    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40
+    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1 --repeat-last-n 64
     ctx_size: 65536
     jinja: false
   gemma-3-27b-derestricted-gguf-27b-q8_0:
@@ -160,8 +165,3 @@ models:
     sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.4
     ctx_size: 32768
     ttl: 3600
-  gpt-oss-120b-derestricted.mxfp4_moe-gguf-117b-latest:
-    ollama_model: hf.co/gghfez/gpt-oss-120b-Derestricted.MXFP4_MOE-gguf:latest
-    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40
-    ctx_size: 65536
-    jinja: false

@@ -7,6 +7,8 @@ from harmony_proxy import (
     is_harmony_model,
     is_mxfp4_model,
     get_ollama_model_name,
+    get_model_ctx_size,
+    get_model_sampler_options,
     sanitize_tool_arguments,
     sanitize_function_name,
     openai_messages_to_harmony,
@@ -62,6 +64,36 @@ class TestModelRouting:
         # Unknown model returns original
         mapped = get_ollama_model_name("ms/some-unknown-model")
         assert mapped == "ms/some-unknown-model"
+
+    def test_model_ctx_size_from_config(self):
+        """Context size should be read from custom_models.yaml."""
+        # MXFP4 GPT-OSS 20B has ctx_size: 65536 in config
+        ctx = get_model_ctx_size("ms/gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
+        assert ctx == 65536
+
+        # Without prefix
+        ctx = get_model_ctx_size("gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
+        assert ctx == 65536
+
+    def test_model_ctx_size_default(self):
+        """Unknown models should get a reasonable default."""
+        ctx = get_model_ctx_size("ms/unknown-model")
+        assert ctx == 32768  # Default
+
+    def test_sampler_options_from_config(self):
+        """Sampler args should be parsed from custom_models.yaml."""
+        # GPT-OSS 20B has all sampler args explicitly configured
+        opts = get_model_sampler_options("ms/gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
+        assert opts.get("temperature") == 0.7
+        assert opts.get("top_p") == 0.95
+        assert opts.get("top_k") == 40
+        assert opts.get("repeat_penalty") == 1.1
+        assert opts.get("repeat_last_n") == 64
+
+    def test_sampler_options_unknown_model(self):
+        """Unknown models should return empty options."""
+        opts = get_model_sampler_options("ms/unknown-model")
+        assert opts == {}
 
 
 class TestToolArgumentSanitization:

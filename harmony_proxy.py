@@ -211,6 +211,80 @@ def get_ollama_model_name(model: str) -> str:
     # No mapping found, return original
     return model
 
+
+def get_model_ctx_size(model: str) -> int:
+    """
+    Get context size for a model from custom config.
+
+    Returns the configured ctx_size or a reasonable default (32768).
+    Ollama's default is only 2048 which is too small for most use cases.
+    """
+    base_name = model[len(MODEL_PREFIX):] if model.startswith(MODEL_PREFIX) else model
+
+    if base_name in CUSTOM_MODELS:
+        ctx_size = CUSTOM_MODELS[base_name].get("ctx_size")
+        if ctx_size:
+            return ctx_size
+
+    # Default to 32k if not specified
+    return 32768
+
+
+def get_model_sampler_options(model: str) -> dict:
+    """
+    Parse sampler_args from custom config into Ollama options dict.
+
+    Handles args like: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1
+    Maps them to Ollama option names: temperature, top_p, top_k, repeat_penalty, min_p
+    """
+    base_name = model[len(MODEL_PREFIX):] if model.startswith(MODEL_PREFIX) else model
+
+    if base_name not in CUSTOM_MODELS:
+        return {}
+
+    sampler_args = CUSTOM_MODELS[base_name].get("sampler_args", "")
+    if not sampler_args:
+        return {}
+
+    options = {}
+    # Map CLI arg names to Ollama option names
+    arg_map = {
+        "--temp": "temperature",
+        "--temperature": "temperature",
+        "--top-p": "top_p",
+        "--top_p": "top_p",
+        "--top-k": "top_k",
+        "--top_k": "top_k",
+        "--repeat-penalty": "repeat_penalty",
+        "--repeat_penalty": "repeat_penalty",
+        "--min-p": "min_p",
+        "--min_p": "min_p",
+        "--repeat-last-n": "repeat_last_n",
+        "--repeat_last_n": "repeat_last_n",
+    }
+
+    # Parse args (simple space-separated key value pairs)
+    parts = sampler_args.split()
+    i = 0
+    while i < len(parts):
+        arg = parts[i]
+        if arg in arg_map and i + 1 < len(parts):
+            try:
+                value = float(parts[i + 1])
+                # top_k should be int
+                if arg_map[arg] in ("top_k", "repeat_last_n"):
+                    value = int(value)
+                options[arg_map[arg]] = value
+                i += 2
+            except ValueError:
+                i += 1
+        else:
+            i += 1
+
+    if options:
+        logger.info(f"Parsed sampler options for {model}: {options}")
+    return options
+
 # Load GPT-OSS Harmony encoding once at startup
 ENC = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
 
@@ -787,6 +861,9 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
         # which breaks streaming. We need full Harmony output for parsing.
         # Translate model name to Ollama name (ms/name -> hf.co/... mapping)
         ollama_model = get_ollama_model_name(model)
+        # Get context size and sampler options from config
+        ctx_size = get_model_ctx_size(model)
+        sampler_opts = get_model_sampler_options(model)
         backend_req = {
             "model": ollama_model,
             "prompt": harmony_prompt,
@@ -798,8 +875,11 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                 # inappropriately (e.g., <|channel|> appearing in wrong places)
                 "repeat_penalty": 1.1,
                 "repeat_last_n": 64,  # Look back 64 tokens for repetition
+                "num_ctx": ctx_size,  # Use configured context size, not Ollama's 2048 default
+                **sampler_opts,  # Apply sampler options from config (temp, top_p, top_k, etc.)
             },
         }
+        logger.info(f"Ollama request: num_ctx={ctx_size}, sampler_opts={sampler_opts}")
         # Ollama uses different parameter names
         if "max_tokens" in body:
             backend_req["options"]["num_predict"] = body["max_tokens"]
@@ -903,20 +983,14 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                         if content:
                             accumulated_raw.append(content)
                             if harmony_parse_failed:
-                                # After parse failure, stream raw content
-                                # But if we've suppressed output (tool call hallucination), don't stream
-                                if state.suppress_remaining_output:
-                                    continue
-                                # Don't stream content that contains raw Harmony tokens
-                                if contains_harmony_tokens(content):
-                                    continue
-                                raw_chunk = {
-                                    "id": chunk_id,
-                                    "object": "chat.completion.chunk",
-                                    "model": model,
-                                    "choices": [{"index": 0, "delta": {"content": content}}],
-                                }
-                                yield f"data: {json.dumps(raw_chunk)}\n\n"
+                                # After Harmony parse failure, DO NOT stream raw content.
+                                # The decoded content contains structural garbage (role names,
+                                # channel names, recipients) that should not be shown to users.
+                                # Limit accumulation to prevent waiting forever on hallucinating model.
+                                if len(accumulated_raw) > 100:
+                                    logger.warning("Harmony parse failed and accumulated 100+ chunks, breaking to avoid indefinite wait")
+                                    break
+                                continue
                             else:
                                 try:
                                     tokens = ENC.encode(content, allowed_special='all')
@@ -926,20 +1000,19 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                                         for delta in deltas:
                                             deltas_emitted += 1
                                             yield f"data: {json.dumps(delta)}\n\n"
+                                        # Check if we should stop streaming (tool call JSON complete)
+                                        if state.suppress_remaining_output:
+                                            logger.info("Suppression triggered, breaking out of stream to avoid waiting for hallucination")
+                                            break
+                                    # Also need to break outer loop
+                                    if state.suppress_remaining_output:
+                                        break
                                 except Exception as e:
-                                    logger.warning(f"Harmony parse error in stream, falling back to raw: {e}")
+                                    logger.warning(f"Harmony parse error in stream, falling back to accumulate-only: {e}")
                                     logger.debug(f"Raw content that failed Harmony parse: {content[:200]}")
                                     harmony_parse_failed = True
-                                    # Yield current content as raw, unless we've suppressed output
-                                    # or content contains raw Harmony tokens
-                                    if not state.suppress_remaining_output and not contains_harmony_tokens(content):
-                                        raw_chunk = {
-                                            "id": chunk_id,
-                                            "object": "chat.completion.chunk",
-                                            "model": model,
-                                            "choices": [{"index": 0, "delta": {"content": content}}],
-                                        }
-                                        yield f"data: {json.dumps(raw_chunk)}\n\n"
+                                    # DO NOT stream raw content - it contains structural garbage.
+                                    # The content will be accumulated for debugging in the logs.
 
             # Finalize parsing by sending <|end|> if we're still in Harmony mode
             if not harmony_parse_failed:
@@ -1019,6 +1092,33 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
                 for i, msg in enumerate(parser.messages):
                     logger.warning(f"  Message {i}: channel={msg.channel}, recipient={msg.recipient}")
 
+                # Determine appropriate error message
+                if chunks_received == 0 or len(raw_text) == 0:
+                    # Model returned empty response - likely context overflow
+                    error_msg = "Model returned empty response. This usually means the conversation context exceeded the model's limit. Try starting a new conversation or reducing the context size."
+                    logger.error(f"Empty response from model (context overflow?): chunks_received={chunks_received}")
+                elif harmony_parse_failed:
+                    error_msg = "Model generated malformed output (Harmony parse failure). This may happen with complex prompts or many tools. Try simplifying the request or using a different model."
+                    logger.error(f"Harmony parse failure with no output")
+                else:
+                    # Model generated something but we couldn't extract content
+                    error_msg = "Model generated output but no usable content was extracted. The model may be confused. Try rephrasing your request."
+                    logger.error(f"No content extracted from model output")
+
+                error_chunk = {
+                    "id": chunk_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": error_msg},
+                        "finish_reason": None,
+                    }],
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n"
+                deltas_emitted += 1
+
             # Emit final chunk with appropriate finish_reason
             logger.info(f"Stream complete: chunks_received={chunks_received}, deltas_emitted={deltas_emitted}, has_tool_calls={state.has_tool_calls}")
             finish_reason = "tool_calls" if state.has_tool_calls else "stop"
@@ -1095,24 +1195,31 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
 
                     if content:
                         raw_content.append(content)
-                        if not harmony_parse_failed:
+                        if harmony_parse_failed:
+                            # Limit accumulation to prevent waiting forever
+                            if len(raw_content) > 100:
+                                logger.warning("Harmony parse failed and accumulated 100+ chunks, breaking")
+                                break
+                        else:
                             try:
                                 tokens = ENC.encode(content, allowed_special='all')
                                 for token in tokens:
                                     parser.process(token)
                             except Exception as e:
-                                logger.warning(f"Harmony parse error, falling back to raw: {e}")
+                                logger.warning(f"Harmony parse error, falling back to accumulate-only: {e}")
                                 harmony_parse_failed = True
 
         if harmony_parse_failed:
-            # Return raw content as plain response
+            # Return error message - raw content is structural garbage, not usable
+            error_msg = "Model generated malformed output (Harmony parse failure). This may happen with complex prompts or many tools. Try simplifying the request or using a different model."
+            logger.error(f"Non-streaming Harmony parse failed, returning error to client")
             return JSONResponse(content={
                 "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
                 "object": "chat.completion",
                 "model": model,
                 "choices": [{
                     "index": 0,
-                    "message": {"role": "assistant", "content": "".join(raw_content)},
+                    "message": {"role": "assistant", "content": error_msg},
                     "finish_reason": "stop",
                 }],
                 "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
