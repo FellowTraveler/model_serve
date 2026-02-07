@@ -21,6 +21,7 @@ Works on **macOS** (Intel and Apple Silicon) and **Linux**.
 - **Single API endpoint** - All models accessible via one port (OpenAI-compatible)
 - **GPT-OSS Harmony support** - Automatic Harmony encoding/decoding for GPT-OSS models, including tool calls
 - **MXFP4 model support** - Models with MXFP4 quantization automatically route to Ollama (llama.cpp doesn't support MXFP4)
+- **Embeddings support** - Embedding models (containing "embed" in name) route to Ollama for vector generation
 - **On-demand loading** - Models load when first requested, not at startup
 - **LRU-based auto-unload** - Models unload after idle timeout (TTL) or memory pressure, with least-recently-used priority
 - **Ollama integration** - Pull/remove models with automatic config sync
@@ -81,6 +82,8 @@ git submodule update --init --recursive
 The Harmony proxy listens on port 5846 by default - this is the client-facing endpoint. All clients should connect here regardless of model. The proxy automatically handles Harmony encoding/decoding for GPT-OSS models and passes through all other models unchanged.
 
 **MXFP4 Models:** Models with "MXFP4" in the name (case-insensitive) are automatically routed to Ollama instead of llama-swap, since llama.cpp doesn't support MXFP4 quantization. This happens transparently - just use the model name as usual.
+
+**Embedding Models:** Models with "embed" in the name are routed to Ollama for the `/v1/embeddings` endpoint. Available models include `nomic-embed-text` (768 dimensions) and `mxbai-embed-large` (1024 dimensions). Pull them with `ollama pull nomic-embed-text` and `ollama pull mxbai-embed-large`.
 
 ### Model Management
 
@@ -150,6 +153,11 @@ curl http://127.0.0.1:5846/v1/chat/completions \
 curl http://127.0.0.1:5846/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest", "messages": [{"role": "user", "content": "Hello"}]}'
+
+# Embeddings - models with "embed" in name route to Ollama
+curl http://127.0.0.1:5846/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{"model": "ms/nomic-embed-text-137m-f16", "input": "Hello world"}'
 
 # List available models
 curl http://127.0.0.1:5846/v1/models
