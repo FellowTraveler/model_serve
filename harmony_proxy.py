@@ -57,6 +57,11 @@ def is_mxfp4_model(model: str) -> bool:
     return "mxfp4" in model.lower()
 
 
+def is_embedding_model(model: str) -> bool:
+    """Check if model is an embedding model (route to Ollama)."""
+    return "embed" in model.lower()
+
+
 # Harmony special token patterns - content containing these should not be streamed as raw
 HARMONY_TOKEN_PATTERNS = ("<|channel|>", "<|message|>", "<|constrain|>", "<|call|>", "<|end|>", "<|start|>")
 
@@ -1294,9 +1299,28 @@ async def completions(request: Request):
 
 @app.post("/v1/embeddings")
 async def embeddings(request: Request):
-    """Embeddings endpoint - passthrough only."""
+    """Embeddings endpoint - routes embedding models to Ollama."""
     body = await request.json()
-    return await proxy_openai_endpoint("/v1/embeddings", body, stream=False)
+    model = body.get("model", "")
+
+    if is_embedding_model(model):
+        # Route embedding models to Ollama
+        ollama_model = get_ollama_model_name(model)
+        ollama_body = {**body, "model": ollama_model}
+        logger.info(f"Routing embedding request: {model} -> {ollama_model} via Ollama")
+        async with httpx.AsyncClient(timeout=60) as client:
+            try:
+                resp = await client.post(f"{OLLAMA_BASE}/v1/embeddings", json=ollama_body)
+                return JSONResponse(content=resp.json(), status_code=resp.status_code)
+            except Exception as e:
+                logger.error(f"Ollama embeddings request failed: {e}")
+                return JSONResponse(
+                    content={"error": {"message": str(e), "type": "server_error"}},
+                    status_code=500
+                )
+    else:
+        # Non-embedding models passthrough to llama-swap
+        return await proxy_openai_endpoint("/v1/embeddings", body, stream=False)
 
 
 @app.get("/v1/models")

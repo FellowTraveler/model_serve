@@ -165,3 +165,8 @@ models:
     sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.4
     ctx_size: 32768
     ttl: 3600
+  # Embedding models - route to Ollama
+  nomic-embed-text-137m-f16:
+    ollama_model: nomic-embed-text:latest
+  mxbai-embed-large-334m-f16:
+    ollama_model: mxbai-embed-large:latest

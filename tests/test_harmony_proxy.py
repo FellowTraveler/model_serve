@@ -6,6 +6,7 @@ import pytest
 from harmony_proxy import (
     is_harmony_model,
     is_mxfp4_model,
+    is_embedding_model,
     get_ollama_model_name,
     get_model_ctx_size,
     get_model_sampler_options,
@@ -94,6 +95,29 @@ class TestModelRouting:
         """Unknown models should return empty options."""
         opts = get_model_sampler_options("ms/unknown-model")
         assert opts == {}
+
+    def test_embedding_model_detected(self):
+        """Embedding models should be detected by 'embed' in name."""
+        assert is_embedding_model("ms/nomic-embed-text-137m-f16")
+        assert is_embedding_model("ms/mxbai-embed-large-334m-f16")
+        assert is_embedding_model("nomic-embed-text:latest")
+        assert is_embedding_model("MXBAI-EMBED-LARGE")  # Case insensitive
+
+    def test_non_embedding_model_not_detected(self):
+        """Non-embedding models should not be detected."""
+        assert not is_embedding_model("ms/qwen3-32.8b-q8_0")
+        assert not is_embedding_model("llama-3.1-8b")
+        assert not is_embedding_model("gpt-oss-20b")
+
+    def test_embedding_model_ollama_mapping(self):
+        """Embedding models should map to Ollama model names."""
+        # nomic-embed-text mapping
+        mapped = get_ollama_model_name("ms/nomic-embed-text-137m-f16")
+        assert mapped == "nomic-embed-text:latest"
+
+        # mxbai-embed-large mapping
+        mapped = get_ollama_model_name("ms/mxbai-embed-large-334m-f16")
+        assert mapped == "mxbai-embed-large:latest"
 
 
 class TestToolArgumentSanitization:
