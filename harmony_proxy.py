@@ -929,6 +929,123 @@ async def proxy_openai_endpoint(path: str, body: dict, stream: bool):
     return await proxy_to_backend(LLAMA_SWAP_BASE, path, body, stream)
 
 
+async def handle_ollama_chat(body: dict, stream: bool):
+    """
+    Route chat completions through Ollama's native /api/chat endpoint.
+
+    Uses native API instead of /v1/chat/completions because:
+    - Supports think:false to disable reasoning mode
+    - Supports num_ctx to override Ollama's default 2048 context
+    Converts Ollama's response format to OpenAI format.
+    """
+    model = body.get("model", "")
+    ollama_model = get_ollama_model_name(model)
+    ctx_size = get_model_ctx_size(model)
+    sampler_opts = get_model_sampler_options(model)
+
+    # Build Ollama native request
+    ollama_body = {
+        "model": ollama_model,
+        "messages": body.get("messages", []),
+        "stream": stream,
+        "think": False,
+        "options": {"num_ctx": ctx_size, **sampler_opts},
+    }
+    if "max_tokens" in body:
+        ollama_body["options"]["num_predict"] = body["max_tokens"]
+    # Pass through tools for function calling
+    if "tools" in body:
+        ollama_body["tools"] = body["tools"]
+    # Let request-level overrides take precedence
+    for key in ("temperature", "top_p"):
+        if key in body:
+            ollama_body["options"][key] = body[key]
+
+    url = f"{OLLAMA_BASE}/api/chat"
+    chat_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+    created = int(datetime.now().timestamp())
+
+    logger.info(f"Ollama chat: {model} -> {ollama_model}, num_ctx={ctx_size}, sampler={sampler_opts}")
+
+    if stream:
+        async def iter_sse():
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream("POST", url, json=ollama_body, timeout=None) as resp:
+                    async for line in resp.aiter_lines():
+                        if not line:
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+
+                        msg = chunk.get("message", {})
+                        content = msg.get("content", "")
+                        done = chunk.get("done", False)
+
+                        if done:
+                            # Final chunk with finish_reason
+                            sse_data = json.dumps({
+                                "id": chat_id, "object": "chat.completion.chunk",
+                                "created": created, "model": model,
+                                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                            })
+                            yield f"data: {sse_data}\n\n"
+                            yield "data: [DONE]\n\n"
+                        elif content:
+                            sse_data = json.dumps({
+                                "id": chat_id, "object": "chat.completion.chunk",
+                                "created": created, "model": model,
+                                "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}],
+                            })
+                            yield f"data: {sse_data}\n\n"
+        return StreamingResponse(iter_sse(), media_type="text/event-stream")
+    else:
+        async with httpx.AsyncClient(timeout=None) as client:
+            resp = await client.post(url, json=ollama_body, timeout=None)
+            data = resp.json()
+
+        msg = data.get("message", {})
+        prompt_tokens = data.get("prompt_eval_count", 0)
+        completion_tokens = data.get("eval_count", 0)
+
+        # Build OpenAI-format message
+        openai_msg = {"role": "assistant", "content": msg.get("content", "")}
+        if "tool_calls" in msg:
+            # Convert Ollama tool_calls to OpenAI format
+            openai_msg["tool_calls"] = [
+                {
+                    "id": tc.get("id", f"call_{uuid.uuid4().hex[:8]}"),
+                    "type": "function",
+                    "function": {
+                        "name": tc["function"]["name"],
+                        "arguments": json.dumps(tc["function"]["arguments"]),
+                    },
+                }
+                for tc in msg["tool_calls"]
+            ]
+
+        finish_reason = data.get("done_reason", "stop")
+        if "tool_calls" in msg:
+            finish_reason = "tool_calls"
+
+        openai_resp = {
+            "id": chat_id, "object": "chat.completion",
+            "created": created, "model": model,
+            "choices": [{
+                "index": 0,
+                "message": openai_msg,
+                "finish_reason": finish_reason,
+            }],
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+            },
+        }
+        return JSONResponse(content=openai_resp)
+
+
 async def handle_chat_with_harmony(body: dict, stream: bool, backend: Optional[str] = None):
     """
     Handle chat completions for Harmony models (GPT-OSS).
@@ -1415,6 +1532,10 @@ async def chat_completions(request: Request):
 
         logger.info(f"LM Studio passthrough sampler_opts: {sampler_opts}")
         return await proxy_to_backend(LM_STUDIO_BASE, "/v1/chat/completions", lm_body, stream)
+
+    # Ollama backend - use native /api/chat (supports think:false and num_ctx)
+    if backend == "ollama":
+        return await handle_ollama_chat(body, stream)
 
     # Harmony models (GPT-OSS): use Harmony encoding/decoding
     if is_harmony_model(model):

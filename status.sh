@@ -19,6 +19,23 @@ else
     echo "✗ llama-swap: not running"
 fi
 
+# Check Ollama
+OLLAMA_BASE="${OLLAMA_BASE:-http://localhost:11434}"
+if curl -s "${OLLAMA_BASE}/api/version" > /dev/null 2>&1; then
+    OLLAMA_VERSION=$(curl -s "${OLLAMA_BASE}/api/version" | python3 -c "import sys,json; print(json.load(sys.stdin).get('version','?'))" 2>/dev/null || echo "?")
+    echo "✓ ollama: running (v${OLLAMA_VERSION} at ${OLLAMA_BASE})"
+else
+    echo "✗ ollama: not running (expected at ${OLLAMA_BASE})"
+fi
+
+# Check LM Studio
+LM_STUDIO_BASE="${LM_STUDIO_BASE:-http://127.0.0.1:1234}"
+if curl -s "${LM_STUDIO_BASE}/v1/models" > /dev/null 2>&1; then
+    echo "✓ lm_studio: running (at ${LM_STUDIO_BASE})"
+else
+    echo "- lm_studio: not running (expected at ${LM_STUDIO_BASE})"
+fi
+
 # Check pressure unloader
 if pgrep -f "pressure_unloader.py" > /dev/null; then
     echo "✓ pressure_unloader: running"

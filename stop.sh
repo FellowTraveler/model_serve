@@ -3,6 +3,9 @@
 
 echo "Stopping model serving stack..."
 
+# Kill harmony proxy
+pkill -f "harmony_proxy" 2>/dev/null && echo "Stopped harmony proxy" || echo "Harmony proxy not running"
+
 # Kill llama-swap
 pkill -f "llama-swap" 2>/dev/null && echo "Stopped llama-swap" || echo "llama-swap not running"
 

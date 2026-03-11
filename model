@@ -565,6 +565,38 @@ def cmd_names(args: list[str]):
     print(f"\nUse these names in API requests and custom_models.yaml (without {prefix} prefix for yaml)")
 
 
+def resolve_ollama_to_config(ollama_name: str, models: dict) -> list:
+    """Resolve an Ollama model name to config entries by matching blob paths."""
+    try:
+        result = subprocess.run(
+            ['ollama', 'show', ollama_name, '--modelfile'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode != 0:
+            return []
+
+        # Extract FROM line (blob path)
+        blob_path = None
+        for line in result.stdout.split('\n'):
+            if line.startswith('FROM '):
+                blob_path = line[5:].strip()
+                break
+
+        if not blob_path:
+            return []
+
+        # Search config descriptions for this blob path
+        matches = []
+        for model_name, model_config in models.items():
+            desc = model_config.get('description', '')
+            if blob_path in desc:
+                matches.append((model_name, model_config))
+
+        return matches
+    except Exception:
+        return []
+
+
 def cmd_show(args: list[str]):
     """Show full configuration for matching models."""
     if not args:
@@ -580,10 +612,19 @@ def cmd_show(args: list[str]):
         print("No models in config.yaml. Run './model sync' first.")
         return
 
+    # Normalize colon to dash for matching against config keys
+    normalized_filter = filter_term.replace(':', '-')
+
     matches = []
     for model_name, model_config in models.items():
-        if filter_term in model_name.lower():
+        if normalized_filter in model_name.lower():
             matches.append((model_name, model_config))
+
+    # If no matches, try resolving as an Ollama model name via blob path
+    if not matches and ':' in filter_term:
+        matches = resolve_ollama_to_config(args[0], models)
+        if matches:
+            print(f"(resolved Ollama name '{args[0]}' to config entry)\n")
 
     if not matches:
         print(f"No models matching '{args[0]}'")
