@@ -13,8 +13,10 @@ import uuid
 import logging
 import yaml
 import httpx
+import asyncio
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
@@ -48,8 +50,28 @@ LLAMA_SWAP_BASE = os.environ.get("LLAMA_SWAP_BASE", f"http://127.0.0.1:{LLAMA_SW
 # Ollama backend for MXFP4 models (llama.cpp doesn't support MXFP4)
 OLLAMA_BASE = os.environ.get("OLLAMA_BASE", "http://localhost:11434")
 
+# LM Studio backend for models with backend: lm_studio
+LM_STUDIO_BASE = os.environ.get("LM_STUDIO_BASE", "http://127.0.0.1:1234")
+
 # Model name prefix (ms/ = model_serve)
 MODEL_PREFIX = os.environ.get("MODEL_PREFIX", "ms/")
+
+
+async def check_lm_studio_available() -> bool:
+    """
+    Check if LM Studio server is running and accessible.
+
+    Returns True if LM Studio is available, False otherwise.
+
+    Note: LM Studio headless mode has issues with auto-loading models.
+    Users should run the LM Studio GUI and enable the local server manually.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=2) as client:
+            resp = await client.get(f"{LM_STUDIO_BASE}/v1/models")
+            return resp.status_code == 200
+    except Exception:
+        return False
 
 
 def is_mxfp4_model(model: str) -> bool:
@@ -197,6 +219,37 @@ HARMONY_MODELS = load_harmony_models()
 CUSTOM_MODELS = load_custom_models()
 
 
+def get_model_backend(model: str) -> str:
+    """
+    Get configured backend for a model.
+
+    Returns: "llama_swap" (default), "ollama", or "lm_studio"
+
+    Backend is determined by:
+    1. Explicit "backend" field in custom_models.yaml
+    2. MXFP4 models -> ollama (llama.cpp doesn't support MXFP4)
+    3. Embedding models -> ollama
+    4. Default -> llama_swap
+    """
+    base_name = model[len(MODEL_PREFIX):] if model.startswith(MODEL_PREFIX) else model
+
+    # Check for explicit backend in config
+    if base_name in CUSTOM_MODELS:
+        backend = CUSTOM_MODELS[base_name].get("backend")
+        if backend:
+            return backend
+
+    # MXFP4 models go to Ollama
+    if is_mxfp4_model(model):
+        return "ollama"
+
+    # Embedding models go to Ollama
+    if is_embedding_model(model):
+        return "ollama"
+
+    return "llama_swap"
+
+
 def get_ollama_model_name(model: str) -> str:
     """
     Translate model name to Ollama model name if mapping exists.
@@ -215,6 +268,24 @@ def get_ollama_model_name(model: str) -> str:
 
     # No mapping found, return original
     return model
+
+
+def get_lm_studio_model_name(model: str) -> str:
+    """
+    Translate model name to LM Studio model name if mapping exists.
+
+    Handles both prefixed (ms/model-name) and unprefixed (model-name) formats.
+    """
+    base_name = model[len(MODEL_PREFIX):] if model.startswith(MODEL_PREFIX) else model
+
+    if base_name in CUSTOM_MODELS:
+        lm_studio_name = CUSTOM_MODELS[base_name].get("lm_studio_model")
+        if lm_studio_name:
+            logger.info(f"Mapped {model} -> {lm_studio_name} for LM Studio")
+            return lm_studio_name
+
+    # No mapping found, return base name (LM Studio uses different naming)
+    return base_name
 
 
 def get_model_ctx_size(model: str) -> int:
@@ -801,10 +872,21 @@ def harmony_state_to_openai_final(acc: HarmonyAccumulated, model: str) -> dict:
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
+    # Check if LM Studio is available
+    lm_studio_status = "unknown"
+    try:
+        async with httpx.AsyncClient(timeout=2) as client:
+            resp = await client.get(f"{LM_STUDIO_BASE}/v1/models")
+            lm_studio_status = "running" if resp.status_code == 200 else "error"
+    except Exception:
+        lm_studio_status = "not_running"
+
     return {
         "status": "healthy",
         "harmony_models": list(HARMONY_MODELS),
         "llama_swap_base": LLAMA_SWAP_BASE,
+        "lm_studio_base": LM_STUDIO_BASE,
+        "lm_studio_status": lm_studio_status,
     }
 
 
@@ -812,15 +894,14 @@ async def health_check():
 # HTTP Endpoints
 # ============================================================================
 
-async def proxy_openai_endpoint(path: str, body: dict, stream: bool):
+async def proxy_to_backend(base_url: str, path: str, body: dict, stream: bool):
     """
-    Transparent passthrough to llama-swap for non-Harmony models.
+    Transparent passthrough to a backend (llama-swap, LM Studio, etc).
     Preserves request/response byte-for-byte.
     """
-    url = f"{LLAMA_SWAP_BASE}{path}"
+    url = f"{base_url}{path}"
 
     if stream:
-        # Client must be created inside the generator to avoid closing before iteration
         async def iter_stream():
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             model = body.get("model", "unknown").replace("/", "_")
@@ -830,7 +911,6 @@ async def proxy_openai_endpoint(path: str, body: dict, stream: bool):
                 async with client.stream("POST", url, json=body, timeout=None) as resp:
                     with open(response_log, "w") as f:
                         async for chunk in resp.aiter_raw():
-                            # Log raw chunk
                             f.write(chunk.decode("utf-8", errors="replace"))
                             yield chunk
                     logger.info(f"Logged streaming response to {response_log}")
@@ -841,17 +921,32 @@ async def proxy_openai_endpoint(path: str, body: dict, stream: bool):
             return JSONResponse(content=resp.json(), status_code=resp.status_code)
 
 
-async def handle_chat_with_harmony(body: dict, stream: bool):
+async def proxy_openai_endpoint(path: str, body: dict, stream: bool):
+    """
+    Transparent passthrough to llama-swap for non-Harmony models.
+    Preserves request/response byte-for-byte.
+    """
+    return await proxy_to_backend(LLAMA_SWAP_BASE, path, body, stream)
+
+
+async def handle_chat_with_harmony(body: dict, stream: bool, backend: Optional[str] = None):
     """
     Handle chat completions for Harmony models (GPT-OSS).
     Converts OpenAI format to Harmony, calls backend, converts back.
 
     Routes to:
+    - LM Studio if backend="lm_studio" (uses /v1/completions)
     - Ollama for MXFP4 models (llama.cpp doesn't support MXFP4)
     - llama-swap for all other Harmony models
     """
     model = body.get("model", "")
-    use_ollama = is_mxfp4_model(model)
+
+    # Determine backend if not explicitly specified
+    if backend is None:
+        backend = get_model_backend(model)
+
+    use_ollama = backend == "ollama" or is_mxfp4_model(model)
+    use_lm_studio = backend == "lm_studio"
 
     # Convert OpenAI request to Harmony format
     convo = build_conversation(body)
@@ -864,45 +959,63 @@ async def handle_chat_with_harmony(body: dict, stream: bool):
         # Ollama backend - use /api/generate with raw mode
         # CRITICAL: Override stop sequences - Ollama's default stops at Harmony tokens
         # which breaks streaming. We need full Harmony output for parsing.
-        # Translate model name to Ollama name (ms/name -> hf.co/... mapping)
         ollama_model = get_ollama_model_name(model)
-        # Get context size and sampler options from config
         ctx_size = get_model_ctx_size(model)
         sampler_opts = get_model_sampler_options(model)
         backend_req = {
             "model": ollama_model,
             "prompt": harmony_prompt,
             "stream": True,
-            "raw": True,  # Disable Ollama's chat templating
+            "raw": True,
             "options": {
-                "stop": [],  # Clear default Harmony stop tokens so we get full output
-                # Repeat penalty helps prevent GPT-OSS from repeating Harmony tokens
-                # inappropriately (e.g., <|channel|> appearing in wrong places)
+                "stop": [],
                 "repeat_penalty": 1.1,
-                "repeat_last_n": 64,  # Look back 64 tokens for repetition
-                "num_ctx": ctx_size,  # Use configured context size, not Ollama's 2048 default
-                **sampler_opts,  # Apply sampler options from config (temp, top_p, top_k, etc.)
+                "repeat_last_n": 64,
+                "num_ctx": ctx_size,
+                **sampler_opts,
             },
         }
         logger.info(f"Ollama request: num_ctx={ctx_size}, sampler_opts={sampler_opts}")
-        # Ollama uses different parameter names
         if "max_tokens" in body:
             backend_req["options"]["num_predict"] = body["max_tokens"]
         if "temperature" in body:
             backend_req["options"]["temperature"] = body["temperature"]
-        # Allow client to override repeat_penalty if needed
         if "repeat_penalty" in body:
             backend_req["options"]["repeat_penalty"] = body["repeat_penalty"]
         url = f"{OLLAMA_BASE}/api/generate"
         logger.info(f"Routing MXFP4 model {model} -> {ollama_model} to Ollama: {url}")
+    elif use_lm_studio:
+        # LM Studio backend - use /v1/completions (OpenAI-compatible)
+        lm_studio_model = get_lm_studio_model_name(model)
+        sampler_opts = get_model_sampler_options(model)
+
+        backend_req = {
+            "model": lm_studio_model,
+            "prompt": harmony_prompt,
+            "stream": True,
+        }
+
+        # Apply sampler options from config (LM Studio uses standard OpenAI param names)
+        # Supported: temperature, top_p, top_k, repeat_penalty, min_p
+        for key in ("temperature", "top_p", "top_k", "min_p", "repeat_penalty"):
+            if key in sampler_opts:
+                backend_req[key] = sampler_opts[key]
+
+        # Request body overrides config settings
+        for key in ("max_tokens", "temperature", "top_p", "top_k", "min_p", "repeat_penalty", "stop"):
+            if key in body:
+                backend_req[key] = body[key]
+
+        url = f"{LM_STUDIO_BASE}/v1/completions"
+        logger.info(f"Routing Harmony model {model} -> {lm_studio_model} to LM Studio: {url}")
+        logger.info(f"LM Studio request sampler_opts: {sampler_opts}")
     else:
         # llama-swap backend - use /v1/completions
         backend_req = {
             "model": model,
             "prompt": harmony_prompt,
-            "stream": True,  # Always stream from upstream
+            "stream": True,
         }
-        # Copy through other parameters
         for key in ("max_tokens", "temperature", "top_p", "stop"):
             if key in body:
                 backend_req[key] = body[key]
@@ -1258,9 +1371,10 @@ async def chat_completions(request: Request):
     """
     OpenAI-compatible chat completions endpoint.
 
-    NOTE: llama-swap/llama.cpp handles Harmony encoding/decoding via Jinja templates,
-    so we pass through all models transparently. The proxy still serves as a unified
-    endpoint and can add logging/filtering in the future.
+    Routes requests based on model configuration:
+    - Harmony models (GPT-OSS): Harmony encoding via our proxy
+    - LM Studio models: Direct passthrough (LM Studio handles tool calls natively)
+    - Default (llama-swap): Direct passthrough
     """
     try:
         body = await request.json()
@@ -1269,20 +1383,45 @@ async def chat_completions(request: Request):
 
     model = body.get("model", "")
     stream = body.get("stream", False)
+    backend = get_model_backend(model)
 
     # Log request for debugging
     user_agent = request.headers.get("user-agent", "unknown")
     log_request("/v1/chat/completions", body, source=user_agent)
 
-    logger.info(f"Chat completion request: model={model}, stream={stream}, harmony={is_harmony_model(model)}")
+    logger.info(f"Chat completion request: model={model}, stream={stream}, backend={backend}, harmony={is_harmony_model(model)}")
 
-    # Route based on model type
+    # Route based on backend and model type
+    if backend == "lm_studio":
+        # LM Studio backend - check if server is available
+        if not await check_lm_studio_available():
+            return JSONResponse(
+                content={"error": {"message": "LM Studio is not running. Please start LM Studio GUI and enable the local server (Developer tab > Local Server).", "type": "server_error"}},
+                status_code=503,
+            )
+        # GPT-OSS models still need our Harmony encoding (LM Studio's is unreliable)
+        if is_harmony_model(model):
+            return await handle_chat_with_harmony(body, stream, backend="lm_studio")
+
+        # Non-Harmony models: apply config settings then passthrough to LM Studio
+        # LM Studio uses standard OpenAI parameter names (top_p, temperature, etc.)
+        sampler_opts = get_model_sampler_options(model)
+        lm_body = {**body, "model": get_lm_studio_model_name(model)}
+
+        # Apply sampler options from config (only if not already in request body)
+        for key in ("temperature", "top_p", "top_k", "min_p", "repeat_penalty"):
+            if key in sampler_opts and key not in body:
+                lm_body[key] = sampler_opts[key]
+
+        logger.info(f"LM Studio passthrough sampler_opts: {sampler_opts}")
+        return await proxy_to_backend(LM_STUDIO_BASE, "/v1/chat/completions", lm_body, stream)
+
+    # Harmony models (GPT-OSS): use Harmony encoding/decoding
     if is_harmony_model(model):
-        # GPT-OSS models: use Harmony encoding/decoding (llama-server runs with --no-jinja)
         return await handle_chat_with_harmony(body, stream)
-    else:
-        # Other models: passthrough to llama-swap
-        return await proxy_openai_endpoint("/v1/chat/completions", body, stream)
+
+    # Default: passthrough to llama-swap
+    return await proxy_openai_endpoint("/v1/chat/completions", body, stream)
 
 
 # ============================================================================

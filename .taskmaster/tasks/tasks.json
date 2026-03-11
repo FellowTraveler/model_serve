@@ -1,0 +1,656 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Create Harmony models configuration file",
+        "description": "Create a YAML configuration file to define which models should use Harmony encoding/decoding",
+        "details": "Create a `harmony_models.yaml` file with a structure like:\n```yaml\nharmony_models:\n  - gpt-oss-20b\n  - gpt-oss-120b\n```\nThis file will be read by the proxy to determine which models require Harmony processing. The model names must match the model IDs used in llama-swap's config.yaml. Include validation to ensure the file exists and is properly formatted.",
+        "testStrategy": "Create unit tests to verify YAML parsing, handle missing files gracefully, and validate that model names are correctly loaded into a set for fast lookup",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create harmony_models.yaml configuration file structure",
+            "description": "Create the YAML configuration file with the required structure to define Harmony-enabled models",
+            "dependencies": [],
+            "details": "Create a harmony_models.yaml file with the exact structure: harmony_models: [gpt-oss-20b, gpt-oss-120b]. Ensure model names match exactly with llama-swap's config.yaml model keys for proper routing. Place the file in the project root directory.",
+            "status": "pending",
+            "testStrategy": "Verify YAML syntax is valid, confirm file can be parsed with yaml.safe_load(), test that model names are strings and match expected format",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement YAML file loading and validation logic",
+            "description": "Create Python code to load and validate the harmony_models.yaml configuration file",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement file loading using yaml.safe_load() with proper error handling for missing files, invalid YAML syntax, and malformed structure. Convert the loaded model list to a set for O(1) lookup performance: HARMONY_MODELS = set(cfg.get('harmony_models', [])). Include validation to ensure the harmony_models key exists and contains a list.",
+            "status": "pending",
+            "testStrategy": "Test with valid YAML file, test with missing file (should handle gracefully), test with invalid YAML syntax, test with missing harmony_models key, verify set conversion works correctly",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Add configuration file documentation and usage examples",
+            "description": "Create documentation explaining the harmony_models.yaml configuration file format and usage",
+            "dependencies": [
+              2
+            ],
+            "details": "Document the required YAML structure, explain that model names must match llama-swap config.yaml exactly, provide examples of adding new Harmony-native models, and include troubleshooting guide for common configuration errors. Add inline code comments explaining the O(1) lookup optimization and the critical requirement for exact model name matching.",
+            "status": "pending",
+            "testStrategy": "Review documentation for accuracy, verify examples work with actual implementation, test that documented troubleshooting steps resolve common issues",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-02-05T02:38:36.970Z"
+      },
+      {
+        "id": "2",
+        "title": "Set up Python dependencies and project structure",
+        "description": "Install required Python packages and create the basic project structure for the Harmony proxy",
+        "details": "Install dependencies:\n```bash\npip install openai-harmony httpx fastapi uvicorn pyyaml\n```\nCreate the main proxy file `harmony_proxy.py` with imports:\n```python\nfrom openai_harmony import (\n    load_harmony_encoding,\n    HarmonyEncodingName,\n    Conversation,\n    Message,\n    Role,\n    SystemContent,\n    DeveloperContent,\n    ToolDescription,\n    StreamableParser,\n)\n```\nLoad the GPT-OSS encoding at startup: `ENC = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)`",
+        "testStrategy": "Verify all imports work correctly and the Harmony encoding loads without errors. Test that the encoding can be used to create basic Harmony structures.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Install Python dependencies for Harmony proxy",
+            "description": "Install all required Python packages including openai-harmony, httpx, fastapi, uvicorn, and pyyaml",
+            "dependencies": [],
+            "details": "Execute pip install command to install all required dependencies: pip install openai-harmony httpx fastapi uvicorn pyyaml. Verify installation by checking package versions and ensuring no conflicts exist.",
+            "status": "pending",
+            "testStrategy": "Run pip list to verify all packages are installed correctly and test basic imports to ensure no dependency conflicts",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Create main harmony_proxy.py file with required imports",
+            "description": "Create the main proxy file and import all necessary components from openai-harmony package",
+            "dependencies": [
+              1
+            ],
+            "details": "Create harmony_proxy.py file and add all required imports from openai_harmony package: load_harmony_encoding, HarmonyEncodingName, Conversation, Message, Role, SystemContent, DeveloperContent, ToolDescription, StreamableParser. Organize imports clearly and add basic file structure.",
+            "status": "pending",
+            "testStrategy": "Test that all imports execute without errors and verify each imported component is accessible",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Initialize Harmony encoding at module startup",
+            "description": "Load the GPT-OSS Harmony encoding at module level for use throughout the application",
+            "dependencies": [
+              2
+            ],
+            "details": "Add module-level initialization code: ENC = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS). This should be executed once when the module is imported to ensure the encoding is available for all proxy operations.",
+            "status": "pending",
+            "testStrategy": "Verify the encoding loads successfully without errors and test that ENC variable contains a valid encoding object that can be used for Harmony operations",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Verify project structure and basic functionality",
+            "description": "Test the complete setup by creating basic Harmony structures and validating the project foundation",
+            "dependencies": [
+              3
+            ],
+            "details": "Create a simple test script to verify that the encoding can be used to create basic Harmony structures like Conversation and Message objects. Test that all components work together and the foundation is ready for building the proxy functionality.",
+            "status": "pending",
+            "testStrategy": "Run comprehensive tests to create sample Harmony objects, verify encoding functionality, and ensure the project structure is ready for implementing the actual proxy logic",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-02-05T02:39:22.367Z"
+      },
+      {
+        "id": "3",
+        "title": "Implement OpenAI to Harmony message conversion",
+        "description": "Create functions to convert OpenAI message format to Harmony Conversation objects",
+        "details": "Implement `openai_messages_to_harmony(messages)` that maps:\n- `system` → `Role.SYSTEM` with `SystemContent`\n- `user` → `Role.USER`\n- `assistant` → `Role.ASSISTANT`\n- Handle `tool` messages for future multi-turn support\n\nImplement `openai_tools_to_harmony(tools)` that converts OpenAI tool definitions to `ToolDescription` objects with name, description, and parameters.\n\nImplement `build_conversation(body)` that combines messages and tools into a `Conversation` object.\n\nImplement `render_harmony_prompt(convo)` using `ENC.render_conversation_for_completion(convo, Role.ASSISTANT)`",
+        "testStrategy": "Unit tests with sample OpenAI messages and tools, verify correct Harmony objects are created, test edge cases like empty messages or missing tool descriptions",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement openai_messages_to_harmony function",
+            "description": "Create function to convert OpenAI message format to Harmony message objects with proper role mapping",
+            "dependencies": [],
+            "details": "Implement openai_messages_to_harmony(messages) that maps OpenAI message roles to Harmony roles: system -> Role.SYSTEM with SystemContent(text=content), user -> Role.USER with plain content, assistant -> Role.ASSISTANT with plain content, developer -> Role.DEVELOPER with DeveloperContent if used. Handle tool messages for future multi-turn support by preserving them in the conversion.",
+            "status": "pending",
+            "testStrategy": "Unit tests with various OpenAI message formats including system, user, assistant, and tool messages. Verify correct Harmony Role and Content objects are created.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement openai_tools_to_harmony function",
+            "description": "Create function to convert OpenAI tool definitions to Harmony ToolDescription objects",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement openai_tools_to_harmony(tools) that processes OpenAI tool definitions by checking t['type'] == 'function', extracting fn = t['function'], and creating ToolDescription(name=fn['name'], description=fn.get('description', ''), parameters=fn.get('parameters', {})). Handle edge cases where description or parameters are missing.",
+            "status": "pending",
+            "testStrategy": "Unit tests with various OpenAI tool definitions including complete tools, tools missing descriptions, and tools missing parameters. Verify correct ToolDescription objects are created.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement build_conversation function",
+            "description": "Create function to combine converted messages and tools into a Harmony Conversation object",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Implement build_conversation(body) that takes the OpenAI request body, uses openai_messages_to_harmony and openai_tools_to_harmony to convert the messages and tools, then combines them into a Conversation(messages=messages, tools=tools) object. Handle cases where tools may be None or empty.",
+            "status": "pending",
+            "testStrategy": "Unit tests with complete OpenAI request bodies containing both messages and tools, messages only, and tools only. Verify proper Conversation objects are created.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implement render_harmony_prompt function",
+            "description": "Create function to render Harmony Conversation into prompt format for llama-swap",
+            "dependencies": [
+              3
+            ],
+            "details": "Implement render_harmony_prompt(convo) that uses ENC.render_conversation_for_completion(convo, Role.ASSISTANT) to convert the Harmony Conversation object into a token sequence/string that can be sent to llama-swap. This function serves as the final step in the OpenAI to Harmony conversion pipeline.",
+            "status": "pending",
+            "testStrategy": "Unit tests with various Harmony Conversation objects to verify proper prompt rendering. Test with conversations containing different message types and tool definitions.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Integration testing and error handling",
+            "description": "Add comprehensive error handling and integration tests for the complete OpenAI to Harmony conversion pipeline",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "Add error handling for malformed OpenAI messages, invalid tool definitions, and conversion failures. Implement comprehensive integration tests that verify the complete pipeline from OpenAI format input to rendered Harmony prompt output. Test edge cases like empty messages arrays, missing required fields, and invalid role types.",
+            "status": "pending",
+            "testStrategy": "Integration tests covering the full conversion pipeline with various valid and invalid inputs. Test error conditions and verify appropriate exceptions are raised with helpful error messages.",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-02-05T02:41:58.425Z"
+      },
+      {
+        "id": "4",
+        "title": "Implement Harmony to OpenAI response conversion",
+        "description": "Create functions to parse Harmony output and convert it back to OpenAI-compatible responses",
+        "details": "Implement `HarmonySessionState` class to track streaming state and avoid duplicate tool call emissions.\n\nImplement `harmony_state_to_openai_deltas(parser, model, state)` that:\n- Ignores `analysis` channel\n- Converts `commentary` + `recipient=functions.foo` to OpenAI tool_calls deltas\n- Maps `final` channel content to assistant content deltas\n\nImplement `HarmonyAccumulated` class and `harmony_state_to_openai_final(acc, model)` for non-streaming responses that accumulates all channels and produces final OpenAI completion response with proper `finish_reason` (\"stop\" or \"tool_calls\")",
+        "testStrategy": "Unit tests with synthetic Harmony output strings, verify tool calls are extracted correctly, test that analysis channel is dropped, verify streaming deltas match expected OpenAI format",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement HarmonySessionState class for tracking streaming state",
+            "description": "Create a class to track streaming state and avoid duplicate tool call emissions during Harmony to OpenAI conversion",
+            "dependencies": [],
+            "details": "Implement HarmonySessionState class with emitted_tool_call_for_message property to track which tool calls have been emitted. Include logic to reset state when channel/recipient changes indicating a new message. This prevents duplicate tool call emissions in streaming responses.",
+            "status": "pending",
+            "testStrategy": "Unit tests to verify state tracking works correctly, test reset behavior on channel/recipient changes, verify duplicate prevention",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement harmony_state_to_openai_deltas function for streaming conversion",
+            "description": "Create the main streaming conversion function that converts Harmony parser state to OpenAI delta format",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement harmony_state_to_openai_deltas(parser, model, state) that processes StreamableParser data: ignores analysis channel completely, converts commentary channel with functions.* recipient to OpenAI tool_calls deltas by extracting function name and JSON arguments, maps final channel content to assistant content deltas. Use uuid.uuid4().hex for IDs and proper OpenAI streaming format.",
+            "status": "pending",
+            "testStrategy": "Unit tests with mock parser states for each channel type, verify analysis channel is ignored, test tool call delta generation, verify assistant content deltas",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement HarmonyAccumulated class for non-streaming responses",
+            "description": "Create accumulator class to collect all Harmony channels for final response generation",
+            "dependencies": [],
+            "details": "Implement HarmonyAccumulated class with final_content array, tool_name and tool_args properties. Include add_from_parser(parser) method that extracts and accumulates data from StreamableParser based on current channel and role. Handle commentary channel tool calls and final channel assistant content.",
+            "status": "pending",
+            "testStrategy": "Unit tests to verify accumulation logic, test add_from_parser method with different parser states, verify proper data extraction",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implement harmony_state_to_openai_final function for complete responses",
+            "description": "Create function to convert accumulated Harmony data to final OpenAI completion response",
+            "dependencies": [
+              3
+            ],
+            "details": "Implement harmony_state_to_openai_final(acc, model) that takes HarmonyAccumulated data and produces final OpenAI completion response. Set proper finish_reason: 'stop' for normal completion with final content, 'tool_calls' when response contains tool calls. Format response with correct OpenAI structure including choices array.",
+            "status": "pending",
+            "testStrategy": "Unit tests with different accumulated data scenarios, verify finish_reason logic, test complete response format matches OpenAI specification",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Implement channel-specific parsing logic",
+            "description": "Create helper functions to handle different Harmony channel types according to conversion rules",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Implement channel parsing logic that properly handles: analysis channel (drop/ignore), commentary channel with functions.* recipient (extract function name via recipient.split('.', 1)[1] and parse JSON arguments from current_content), final channel with assistant role (extract user-visible content). Integrate with streaming state tracking.",
+            "status": "pending",
+            "testStrategy": "Unit tests for each channel type, verify function name extraction from recipient, test JSON argument parsing, verify analysis channel is dropped",
+            "parentId": "undefined"
+          },
+          {
+            "id": 6,
+            "title": "Add comprehensive error handling and validation",
+            "description": "Implement robust error handling for malformed Harmony data and edge cases in conversion process",
+            "dependencies": [
+              2,
+              4,
+              5
+            ],
+            "details": "Add error handling for: invalid JSON in tool arguments, missing required parser properties, malformed channel data, invalid recipient formats. Include validation for StreamableParser state consistency and proper fallback behavior when conversion fails. Log errors appropriately for debugging.",
+            "status": "pending",
+            "testStrategy": "Unit tests with malformed input data, test error recovery mechanisms, verify logging output, test edge cases like empty content or missing properties",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-02-05T02:44:03.564Z"
+      },
+      {
+        "id": "5",
+        "title": "Create FastAPI proxy server with routing logic",
+        "description": "Implement the main FastAPI application with model-based routing between Harmony and passthrough modes",
+        "details": "Create FastAPI app with:\n- Configuration loading from `harmony_models.yaml`\n- `is_harmony_model(model)` function for routing decisions\n- Environment variable `LLAMA_SWAP_BASE` (default: http://127.0.0.1:8000)\n- Basic error handling and logging\n- Health check endpoint\n\nImplement routing logic that checks if the requested model is in `HARMONY_MODELS` set and routes accordingly. Include proper HTTP status code handling and error responses.",
+        "testStrategy": "Test configuration loading, verify routing logic with different model names, test error handling for invalid requests, verify environment variable handling",
+        "priority": "medium",
+        "dependencies": [
+          "4"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create FastAPI application with configuration loading",
+            "description": "Set up the basic FastAPI application structure and implement configuration loading from harmony_models.yaml",
+            "dependencies": [],
+            "details": "Create the main FastAPI app instance, implement YAML configuration loading with error handling for missing files and invalid YAML format. Load HARMONY_MODELS set from configuration and set up LLAMA_SWAP_BASE environment variable with default value http://127.0.0.1:8000. Include proper exception handling for file operations.",
+            "status": "pending",
+            "testStrategy": "Test configuration loading with valid YAML, missing file scenarios, and invalid YAML format. Verify environment variable handling with default and custom values.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement model routing logic and is_harmony_model function",
+            "description": "Create the core routing function to determine if a model should use Harmony processing",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement is_harmony_model(model: str) -> bool function that checks if the requested model exists in the HARMONY_MODELS set loaded from configuration. This function will be the core decision point for routing requests between Harmony and passthrough modes.",
+            "status": "pending",
+            "testStrategy": "Test with models that are in the harmony_models list, models not in the list, and edge cases like empty strings or None values.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Add health check endpoint and basic error handling",
+            "description": "Implement health check endpoint for monitoring and basic error handling infrastructure",
+            "dependencies": [
+              1
+            ],
+            "details": "Create a /health endpoint that returns service status and configuration validation. Implement basic error handling middleware for HTTP requests, including proper status codes (404, 500, etc.) and JSON error responses. Add logging configuration for debugging and monitoring purposes.",
+            "status": "pending",
+            "testStrategy": "Test health endpoint returns 200 status, verify error handling returns appropriate HTTP status codes, test logging output for various scenarios.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implement HTTP proxy routing with status code handling",
+            "description": "Create the main proxy routing logic that forwards requests based on model type with proper HTTP handling",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Implement the main request routing logic that uses is_harmony_model() to determine routing destination. Handle HTTP request forwarding to LLAMA_SWAP_BASE, preserve original request headers and body, and implement proper HTTP status code propagation from upstream services. Include timeout handling and connection error management.",
+            "status": "pending",
+            "testStrategy": "Test routing for harmony models vs non-harmony models, verify HTTP status codes are properly forwarded, test error scenarios like upstream service unavailable, verify request/response body preservation.",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-02-05T02:44:40.389Z"
+      },
+      {
+        "id": "6",
+        "title": "Implement OpenAI chat completions endpoint with Harmony support",
+        "description": "Create the `/v1/chat/completions` endpoint that handles both Harmony and passthrough modes with streaming support",
+        "details": "Implement `@app.post(\"/v1/chat/completions\")` that:\n- Reads request body and extracts model and stream flag\n- Routes to `handle_chat_with_harmony()` for Harmony models\n- Routes to `proxy_openai_endpoint()` for other models\n\nImplement `handle_chat_with_harmony()` that:\n- Converts OpenAI request to Harmony format\n- Calls llama-swap with Harmony prompt\n- Streams response through `StreamableParser`\n- Converts back to OpenAI format using the conversion functions\n- Supports both streaming (SSE) and non-streaming responses",
+        "testStrategy": "Integration tests with mock llama-swap responses, test both streaming and non-streaming modes, verify proper SSE formatting, test error handling for malformed requests",
+        "priority": "high",
+        "dependencies": [
+          "5"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement main chat completions endpoint handler",
+            "description": "Create the FastAPI POST endpoint for /v1/chat/completions that reads request body and routes to appropriate handler",
+            "dependencies": [],
+            "details": "Implement @app.post(\"/v1/chat/completions\") that extracts model and stream flag from request body, determines if model is Harmony-compatible, and routes to either handle_chat_with_harmony() or proxy_openai_endpoint() accordingly",
+            "status": "pending",
+            "testStrategy": "Unit tests with mock request bodies, verify correct routing based on model type, test request parsing and validation",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement Harmony chat handler with streaming support",
+            "description": "Create handle_chat_with_harmony() function that processes Harmony models with both streaming and non-streaming responses",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement handle_chat_with_harmony() that converts OpenAI request to Harmony format, calls llama-swap with Harmony prompt as single user message, uses httpx.AsyncClient with timeout=None, and handles both streaming and non-streaming response paths",
+            "status": "pending",
+            "testStrategy": "Integration tests with mock llama-swap responses, verify Harmony format conversion, test timeout handling",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement streaming response processing with SSE",
+            "description": "Create streaming response handler that processes llama-swap output through StreamableParser and converts to OpenAI SSE format",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement streaming path using iter_sse that creates StreamableParser(ENC, role=Role.ASSISTANT), processes raw chunks with parser.process(), converts using harmony_state_to_openai_deltas(), yields SSE-formatted deltas, and emits final stop chunk with [DONE]",
+            "status": "pending",
+            "testStrategy": "Test SSE formatting, verify proper delta emission, test stop chunk generation, validate streaming response structure",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implement non-streaming response aggregation",
+            "description": "Create non-streaming response handler that accumulates all streaming data and returns final OpenAI response",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement non-streaming path that consumes all text from upstream llama-swap, creates parser and processes all text at once, uses HarmonyAccumulated to collect data, and returns harmony_state_to_openai_final(acc, model) as JSONResponse",
+            "status": "pending",
+            "testStrategy": "Test response aggregation, verify final response format matches OpenAI spec, test with various response sizes",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Add error handling and response formatting",
+            "description": "Implement comprehensive error handling and ensure proper HTTP response formatting for both streaming and non-streaming modes",
+            "dependencies": [
+              3,
+              4
+            ],
+            "details": "Add error handling for malformed requests, llama-swap connection failures, and parsing errors. Ensure StreamingResponse uses media_type=\"text/event-stream\" for SSE. Handle edge cases like empty responses and connection timeouts gracefully",
+            "status": "pending",
+            "testStrategy": "Test error scenarios including malformed requests, connection failures, timeout handling, verify proper HTTP status codes and error response formats",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-02-05T02:45:25.132Z"
+      },
+      {
+        "id": "7",
+        "title": "Implement transparent passthrough for non-Harmony endpoints",
+        "description": "Create generic passthrough functionality for all non-Harmony models and endpoints",
+        "details": "Implement `proxy_openai_endpoint(path, body, stream)` that:\n- Forwards requests byte-for-byte to llama-swap\n- Preserves all headers and HTTP methods\n- Handles streaming responses with `httpx.AsyncClient.stream`\n- Maintains response status codes and error handling\n- Works for any endpoint path (chat/completions, completions, embeddings, etc.)\n\nEnsure the proxy is completely transparent for non-Harmony models - clients should see identical behavior as if talking directly to llama-swap.",
+        "testStrategy": "Test with various OpenAI endpoints, verify headers are preserved, test streaming and non-streaming responses, compare responses with direct llama-swap calls to ensure transparency",
+        "priority": "medium",
+        "dependencies": [
+          "6"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement basic proxy_openai_endpoint function structure",
+            "description": "Create the core proxy_openai_endpoint function with proper parameter handling and httpx client setup",
+            "dependencies": [],
+            "details": "Implement proxy_openai_endpoint(path, body, stream) function that sets up httpx.AsyncClient with timeout=None. Handle the basic function signature and parameter validation. Set up the foundation for both streaming and non-streaming request handling.",
+            "status": "pending",
+            "testStrategy": "Unit tests to verify function accepts correct parameters and initializes httpx client properly",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement streaming response handling with byte-for-byte passthrough",
+            "description": "Add streaming functionality that preserves raw bytes and maintains complete transparency",
+            "dependencies": [
+              1
+            ],
+            "details": "For streaming requests, use client.stream('POST', url, json=body, timeout=None) and iterate with aiter_raw() to relay bytes unchanged. Return StreamingResponse(iter_stream(), media_type='text/event-stream'). Ensure no decoding/encoding of response data to maintain byte-for-byte passthrough.",
+            "status": "pending",
+            "testStrategy": "Test with streaming endpoints, verify raw bytes are preserved, compare output with direct llama-swap calls",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement non-streaming response handling with status code preservation",
+            "description": "Add non-streaming functionality that maintains response status codes and headers",
+            "dependencies": [
+              1
+            ],
+            "details": "For non-streaming requests, use await client.post(url, json=body, timeout=None) and return JSONResponse(content=resp.json(), status_code=resp.status_code). Preserve all response headers and maintain identical status codes as returned by llama-swap.",
+            "status": "pending",
+            "testStrategy": "Test with non-streaming endpoints, verify status codes and headers are preserved, test error responses",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Add comprehensive endpoint path support and integration testing",
+            "description": "Ensure the proxy works transparently for all OpenAI endpoint paths and integrate with the main application",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Test and verify the proxy works for all endpoint paths including chat/completions, completions, embeddings, rerank, etc. Integrate the proxy function into the main application routing. Ensure complete transparency where clients see identical behavior as talking directly to llama-swap.",
+            "status": "pending",
+            "testStrategy": "Integration tests with various OpenAI endpoints, compare responses with direct llama-swap calls, test with real OpenAI clients to ensure transparency",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-02-05T02:45:57.647Z"
+      },
+      {
+        "id": "8",
+        "title": "Implement Anthropic Messages API passthrough support",
+        "description": "Add support for Anthropic's `/v1/messages` endpoint with complete passthrough to llama-swap",
+        "details": "Implement `@app.post(\"/v1/messages\")` endpoint that:\n- Always uses passthrough mode (no Harmony conversion for Anthropic format)\n- Preserves Anthropic-specific SSE event types (`message_start`, `content_block_delta`, etc.)\n- Handles Anthropic's different streaming format\n- Maintains compatibility with Claude Code and other Anthropic clients\n\nRationale: Harmony is designed for OpenAI message format, not Anthropic's format. Mixing them would risk undefined behavior.",
+        "testStrategy": "Test with Anthropic-compatible clients, verify SSE event types are preserved, test tool calling through Anthropic format, ensure streaming works correctly",
+        "priority": "medium",
+        "dependencies": [
+          "7"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Anthropic Messages API endpoint handler",
+            "description": "Create the FastAPI endpoint handler for /v1/messages that accepts Anthropic-formatted requests",
+            "dependencies": [],
+            "details": "Implement @app.post('/v1/messages') endpoint that accepts Anthropic Messages API requests. Parse the request body to extract model, messages, stream flag, and other Anthropic-specific parameters. Validate the request format matches Anthropic's specification including required fields like messages array and model parameter.",
+            "status": "pending",
+            "testStrategy": "Unit tests with valid and invalid Anthropic request payloads, verify proper request parsing and validation",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement passthrough request forwarding to llama-swap",
+            "description": "Forward Anthropic requests directly to llama-swap without any Harmony conversion processing",
+            "dependencies": [
+              1
+            ],
+            "details": "Create request forwarding logic that sends Anthropic Messages API requests directly to llama-swap's /v1/messages endpoint. Preserve all original headers, request body, and HTTP method. Use httpx.AsyncClient to maintain async compatibility and handle connection management properly.",
+            "status": "pending",
+            "testStrategy": "Integration tests verifying requests are forwarded byte-for-byte, test header preservation and HTTP method handling",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Handle Anthropic-specific streaming response format",
+            "description": "Process streaming responses from llama-swap preserving Anthropic SSE event types and format",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement streaming response handling that preserves Anthropic-specific SSE event types: message_start, content_block_delta, content_block_stop, message_delta, message_stop. Stream the response back to client maintaining the exact Anthropic streaming format without any OpenAI conversion. Handle both streaming and non-streaming response modes based on the stream parameter.",
+            "status": "pending",
+            "testStrategy": "Test streaming responses with Anthropic clients like Claude Code, verify all SSE event types are preserved correctly, test non-streaming responses",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-02-05T02:46:26.084Z"
+      },
+      {
+        "id": "9",
+        "title": "Add comprehensive test suite with synthetic Harmony examples",
+        "description": "Create unit and integration tests using realistic Harmony examples to verify correct parsing and conversion",
+        "details": "Create test cases based on official Harmony examples:\n- Single tool call + final answer scenario\n- Multiple tool calls\n- Analysis channel filtering (should be dropped)\n- Edge cases like malformed JSON in tool arguments\n\nTest synthetic Harmony output like:\n```\n<|start|>assistant<|channel|>analysis<|message|>Need to use function get_current_weather.<|end|>\n<|start|>assistant<|channel|>commentary to=functions.get_current_weather <|constrain|>json<|message|>{\"location\":\"San Francisco\"}<|call|>\n<|start|>assistant<|channel|>final<|message|>It's 20°C and sunny in San Francisco.<|return|>\n```\n\nVerify expected OpenAI tool_calls and content are generated correctly.",
+        "testStrategy": "Automated test suite with pytest, mock llama-swap responses, test both streaming and non-streaming conversion, verify tool call extraction accuracy, test error handling",
+        "priority": "medium",
+        "dependencies": [
+          "8"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create test file structure and basic test setup",
+            "description": "Set up the test directory structure and create the main test file with pytest configuration and imports",
+            "dependencies": [],
+            "details": "Create test_harmony_conversion.py file with necessary imports including pytest, openai_harmony modules, and mock utilities. Set up test fixtures for common test data like model names and expected OpenAI response formats. Configure pytest settings for running the comprehensive test suite.",
+            "status": "pending",
+            "testStrategy": "Verify test file can be imported and pytest discovers all test functions correctly",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement single tool call scenario test",
+            "description": "Create test case for the basic weather function example with single tool call and final answer",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement test that feeds the synthetic Harmony weather example chunk by chunk to simulate streaming. Test the complete flow: analysis channel ignored, commentary with to=functions.get_current_weather creates tool_call delta, tool result processed, final channel becomes content delta. Verify accumulated deltas match expected OpenAI format with correct function name and JSON arguments.",
+            "status": "pending",
+            "testStrategy": "Feed harmony_text incrementally, call process() and harmony_state_to_openai_deltas after each chunk, assert tool deltas have correct function.name and arguments, verify final content concatenation",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement multiple tool calls and edge cases tests",
+            "description": "Create test cases for multiple sequential tool calls and edge cases like malformed JSON in tool arguments",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement tests for scenarios with multiple tool calls in sequence, ensuring each tool call is properly extracted and converted. Add edge case tests for malformed JSON in tool arguments, missing required fields, and invalid channel types. Test that the parser handles these gracefully without crashing and produces appropriate error responses or skips malformed sections.",
+            "status": "pending",
+            "testStrategy": "Create synthetic Harmony examples with multiple tool calls, test malformed JSON handling, verify error recovery and proper delta generation for valid portions",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Add integration tests with streaming and non-streaming modes",
+            "description": "Create comprehensive integration tests that verify both streaming and non-streaming conversion modes work correctly",
+            "dependencies": [
+              3
+            ],
+            "details": "Implement integration tests that test the complete conversion pipeline in both streaming (using harmony_state_to_openai_deltas) and non-streaming (using harmony_state_to_openai_final) modes. Verify that both modes produce equivalent final results when given the same Harmony input. Test with various Harmony examples from official documentation and ensure OpenAI compatibility.",
+            "status": "pending",
+            "testStrategy": "Run same test cases in both streaming and non-streaming modes, compare final accumulated results for equivalence, verify OpenAI format compliance using schema validation",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-02-05T02:47:07.164Z"
+      },
+      {
+        "id": "10",
+        "title": "Create integration documentation and model_serve integration",
+        "description": "Document the proxy setup and create integration scripts for model_serve",
+        "details": "Create documentation covering:\n- How to configure `harmony_models.yaml`\n- Environment variables and configuration options\n- Integration with existing `model_serve` setup\n- Client configuration (pointing to proxy instead of llama-swap)\n\nCreate a startup function for `model_serve` similar to `start_llama_swap()`:\n```bash\nstart_harmony_proxy() {\n    echo \"Starting Harmony proxy on port ${HARMONY_PROXY_PORT}...\"\n    uvicorn harmony_proxy:app --host 0.0.0.0 --port ${HARMONY_PROXY_PORT} &\n    HARMONY_PROXY_PID=$!\n    echo \"Harmony proxy PID: $HARMONY_PROXY_PID\"\n}\n```\n\nInclude troubleshooting guide and examples of client configuration changes.",
+        "testStrategy": "Manual testing of integration with model_serve, verify startup scripts work correctly, test client connectivity through proxy, validate documentation accuracy",
+        "priority": "low",
+        "dependencies": [
+          "9"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create comprehensive integration documentation",
+            "description": "Write detailed documentation covering proxy setup, configuration, and integration with model_serve",
+            "dependencies": [],
+            "details": "Create documentation file (README_INTEGRATION.md) covering: harmony_models.yaml configuration format and examples, environment variables (HARMONY_PROXY_PORT, LLAMA_SWAP_BASE) with default values, architecture overview (Clients -> Harmony Proxy -> llama-swap -> llama-server), client configuration changes needed to point to proxy instead of llama-swap directly",
+            "status": "pending",
+            "testStrategy": "Manual review of documentation completeness and accuracy, verify all configuration options are documented with examples",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Create start_harmony_proxy shell function for model_serve",
+            "description": "Implement the startup function that integrates with existing model_serve infrastructure",
+            "dependencies": [
+              1
+            ],
+            "details": "Add start_harmony_proxy() function to model_serve scripts that starts uvicorn server on HARMONY_PROXY_PORT, captures PID for process management, includes proper error handling and logging. Function should follow same pattern as existing start_llama_swap() function for consistency",
+            "status": "pending",
+            "testStrategy": "Test function execution, verify proxy starts correctly, test PID capture and process management, ensure integration with existing model_serve workflow",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Document client configuration changes and examples",
+            "description": "Create detailed examples showing how clients should be reconfigured to use the proxy",
+            "dependencies": [
+              1
+            ],
+            "details": "Document specific client configuration changes: Goose configuration pointing to proxy port instead of llama-swap, OpenAI client base URL changes, example configuration files showing before/after proxy integration, emphasize that no client code changes are needed, only base URL configuration",
+            "status": "pending",
+            "testStrategy": "Validate examples with actual client configurations, test that documented changes work correctly, verify no code changes are required",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Create troubleshooting guide and testing procedures",
+            "description": "Develop comprehensive troubleshooting documentation and integration testing procedures",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Create troubleshooting section covering: common startup issues and solutions, port conflicts and resolution, proxy connectivity testing procedures, log analysis guidance, integration testing checklist for verifying proxy works with model_serve, validation steps for client connectivity through proxy",
+            "status": "pending",
+            "testStrategy": "Manual testing of integration scenarios, verify troubleshooting steps resolve common issues, test startup scripts work correctly, validate client connectivity through proxy",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-02-05T02:48:01.145Z"
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-02-05T02:48:01.145Z",
+      "taskCount": 10,
+      "completedCount": 10,
+      "tags": [
+        "master"
+      ]
+    }
+  }
+}

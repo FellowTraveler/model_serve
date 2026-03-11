@@ -1,0 +1,1492 @@
+{
+  "timestamp": "2026-02-04T22:40:26.533815",
+  "endpoint": "/v1/chat/completions",
+  "source": "unknown",
+  "body": {
+    "model": "ls/gpt-oss-20b-derestricted-gguf-20.9b-q8_0",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a general-purpose AI agent called goose, created by Block, the parent company of Square, CashApp, and Tidal.\ngoose is being developed as an open-source software project.\n\ngoose uses LLM providers with tool calling capability. You can be used with different language models (gpt-4o,\nclaude-sonnet-4, o1, llama-3.2, deepseek-r1, etc).\nThese models have varying knowledge cut-off dates depending on when they were trained, but typically it's between 5-10\nmonths prior to the current date.\n\n# Extensions\n\nExtensions allow other applications to provide context to goose. Extensions connect goose to different data sources and\ntools.\nYou are capable of dynamically plugging into new extensions and learning how to use them. You solve higher level\nproblems using the tools in these extensions, and can interact with multiple at once.\n\nIf the Extension Manager extension is enabled, you can use the search_available_extensions tool to discover additional\nextensions that can help with your task. To enable or disable extensions, use the manage_extensions tool with the\nextension_name. You should only enable extensions found from the search_available_extensions tool.\nIf Extension Manager is not available, you can only work with currently enabled extensions and cannot dynamically load\nnew ones.\n\nBecause you dynamically load extensions, your conversation history may refer\nto interactions with extensions that are not currently active. The currently\nactive extensions are below. Each of these extensions provides tools that are\nin your tool specification.\n\n\n## computercontroller\n\ncomputercontroller supports resources, you can use extensionmanager__read_resource,\nand extensionmanager__list_resources on this extension.\n### Instructions\nYou are a helpful assistant to a power user who is not a professional developer, but you may use development tools to help assist them.\nThe user may not know how to break down tasks, so you will need to ensure that you do, and run things in batches as needed.\nThe ComputerControllerExtension helps you with common tasks like web scraping,\ndata processing, and automation without requiring programming expertise.\n\nYou can use scripting as needed to work with text files of data, such as csvs, json, or text files etc.\nUsing the developer extension is allowed for more sophisticated tasks or instructed to (js or py can be helpful for more complex tasks if tools are available).\n\nAccessing web sites, even apis, may be common (you can use scripting to do this) without troubling them too much (they won't know what limits are).\nTry to do your best to find ways to complete a task without too many questions or offering options unless it is really unclear, find a way if you can.\nYou can also guide them steps if they can help out as you go along.\n\nThere is already a screenshot tool available you can use if needed to see what is on screen.\n\nHere are some extra tools:\nautomation_script\n  - Create and run Shell and Ruby scripts\n  - Shell (bash) is recommended for most tasks\n  - Scripts can save their output to files\n  - macOS-specific features:\n    - AppleScript for system and UI control\n    - Integration with macOS apps and services\n  - Use the screenshot tool if needed to help with tasks\n\ncomputer_control\n  - System automation using AppleScript\n  - Consider the screenshot tool to work out what is on screen and what to do to help with the control task.\n\nWhen you need to interact with websites or web applications, consider using the computer_control tool with AppleScript, which can automate Safari or other browsers to:\n  - Open specific URLs\n  - Fill in forms\n  - Click buttons\n  - Extract content\n  - Handle web-based workflows\nThis is often more reliable than web scraping for modern web applications.\n\n\nweb_scrape\n  - Fetch content from html websites and APIs\n  - Save as text, JSON, or binary files\n  - Content is cached locally for later use\n  - This is not optimised for complex websites, so don't use this as the first tool.\ncache\n  - Manage your cached files\n  - List, view, delete files\n  - Clear all cached data\nThe extension automatically manages:\n- Cache directory: /Users/au/.cache/goose/computer_controller\n- File organization and cleanup\n\n## developer\n\n### Instructions\n    The developer extension gives you the capabilities to edit code files and run shell commands,\n    and can be used to solve a wide range of problems.\n\nYou can use the shell tool to run any command that would work on the relevant operating system.\nUse the shell tool as needed to locate files or interact with the project.\n\nLeverage `analyze` through `return_last_only=true` subagents for deep codebase understanding with lean context\n- delegate analysis, retain summaries\n\nYour windows/screen tools can be used for visual debugging. You should not use these tools unless\nprompted to, but you can mention they are available if they are relevant.\n\nAlways prefer ripgrep (rg -C 3) to grep.\n\noperating system: macos\ncurrent directory: /Users/au/claude/goose/epstein\nshell: /bin/zsh\n\n    \nAdditional Text Editor Tool Instructions:\n\nPerform text editing operations on files.\n\nThe `command` parameter specifies the operation to perform. Allowed options are:\n- `view`: View the content of a file.\n- `write`: Create or overwrite a file with the given content\n- `str_replace`: Replace text in one or more files.\n- `insert`: Insert text at a specific line location in the file.\n- `undo_edit`: Undo the last edit made to a file.\n\nTo use the write command, you must specify `file_text` which will become the new content of the file. Be careful with\nexisting files! This is a full overwrite, so you must include everything - not just sections you are modifying.\n\nTo use the str_replace command to edit multiple files, use the `diff` parameter with a unified diff.\nTo use the str_replace command to edit one file, you must specify both `old_str` and `new_str` - the `old_str` needs to exactly match one\nunique section of the original file, including any whitespace. Make sure to include enough context that the match is not\nambiguous. The entire original string will be replaced with `new_str`\n\nWhen possible, batch file edits together by using a multi-file unified `diff` within a single str_replace tool call.\n\nTo use the insert command, you must specify both `insert_line` (the line number after which to insert, 0 for beginning, -1 for end)\nand `new_str` (the text to insert).\n\n\n\nAdditional Shell Tool Instructions:\nExecute a command in the shell.\n\nThis will return the output and error concatenated into a single string, as\nyou would see from running on the command line. There will also be an indication\nof if the command succeeded or failed.\n\nAvoid commands that produce a large amount of output, and consider piping those outputs to files.\n\n**Important**: Each shell command runs in its own process. Things like directory changes or\nsourcing files do not persist between tool calls. So you may need to repeat them each time by\nstringing together commands.\n\nIf fetching web content, consider adding Accept: text/markdown header\nIf you need to run a long lived command, background it - e.g. `uvicorn main:app &` so that\nthis tool does not run indefinitely.\n\n**Important**: Use ripgrep - `rg` - exclusively when you need to locate a file or a code reference,\nother solutions may produce too large output because of hidden files! For example *do not* use `find` or `ls -r`\n  - List files by name: `rg --files | rg <filename>`\n  - List files that contain a regex: `rg '<regex>' -l`\n\n  - Multiple commands: Use && to chain commands, avoid newlines\n  - Example: `cd example && ls` or `source env/bin/activate && pip install numpy`\n\n## extensionmanager\n\n### Instructions\nExtension Management\n\nUse these tools to discover, enable, and disable extensions, as well as review resources.\n\nAvailable tools:\n- search_available_extensions: Find extensions available to enable/disable\n- manage_extensions: Enable or disable extensions\n- list_resources: List resources from extensions\n- read_resource: Read specific resources from extensions\n\nWhen you lack the tools needed to complete a task, use search_available_extensions first\nto discover what extensions can help.\n\nUse manage_extensions to enable or disable specific extensions by name.\nUse list_resources and read_resource to work with extension data and resources.\n\n## fetch\n\n\n## itermmcp\n\n\n## memory\n\n### Instructions\n This extension allows storage and retrieval of categorized information with tagging support. It's designed to help\n manage important information across sessions in a systematic and organized manner.\n Capabilities:\n 1. Store information in categories with optional tags for context-based retrieval.\n 2. Search memories by content or specific tags to find relevant information.\n 3. List all available memory categories for easy navigation.\n 4. Remove entire categories of memories when they are no longer needed.\n When to call memory tools:\n - These are examples where the assistant should proactively call the memory tool because the user is providing recurring preferences, project details, or workflow habits that they may expect to be remembered.\n - Preferred Development Tools & Conventions\n - User-specific data (e.g., name, preferences)\n - Project-related configurations\n - Workflow descriptions\n - Other critical settings\n Interaction Protocol:\n When important information is identified, such as:\n - User-specific data (e.g., name, preferences)\n - Project-related configurations\n - Workflow descriptions\n - Other critical settings\n The protocol is:\n 1. Identify the critical piece of information.\n 2. Ask the user if they'd like to store it for later reference.\n 3. Upon agreement:\n    - Suggest a relevant category like \"personal\" for user data or \"development\" for project preferences.\n    - Inquire about any specific tags they want to apply for easier lookup.\n    - Confirm the desired storage location:\n      - Local storage (.goose/memory) for project-specific details.\n      - Global storage (~/.config/goose/memory) for user-wide data.\n    - Use the remember_memory tool to store the information.\n      - `remember_memory(category, data, tags, is_global)`\n Keywords that trigger memory tools:\n - \"remember\"\n - \"forget\"\n - \"memory\"\n - \"save\"\n - \"save memory\"\n - \"remove memory\"\n - \"clear memory\"\n - \"search memory\"\n - \"find memory\"\n Suggest the user to use memory tools when:\n - When the user mentions a keyword that triggers a memory tool\n - When the user performs a routine task\n - When the user executes a command and would benefit from remembering the exact command\n Example Interaction for Storing Information:\n User: \"For this project, we use black for code formatting\"\n Assistant: \"You've mentioned a development preference. Would you like to remember this for future conversations?\n User: \"Yes, please.\"\n Assistant: \"I'll store this in the 'development' category. Any specific tags to add? Suggestions: #formatting\n #tools\"\n User: \"Yes, use those tags.\"\n Assistant: \"Shall I store this locally for this project only, or globally for all projects?\"\n User: \"Locally, please.\"\n Assistant: *Stores the information under category=\"development\", tags=\"formatting tools\", scope=\"local\"*\n Another Example Interaction for Storing Information:\n User: \"Remember the gh command to view github comments\"\n Assistant: \"Shall I store this locally for this project only, or globally for all projects?\"\n User: \"Globally, please.\"\n Assistant: *Stores the gh command under category=\"github\", tags=\"comments\", scope=\"global\"*\n Example Interaction suggesting memory tools:\n User: \"I'm using the gh command to view github comments\"\n Assistant: \"You've mentioned a command. Would you like to remember this for future conversations?\n User: \"Yes, please.\"\n Assistant: \"I'll store this in the 'github' category. Any specific tags to add? Suggestions: #comments #gh\"\n Retrieving Memories:\n To access stored information, utilize the memory retrieval protocols:\n - **Search by Category**:\n   - Provides all memories within the specified context.\n   - Use: `retrieve_memories(category=\"development\", is_global=False)`\n   - Note: If you want to retrieve all local memories, use `retrieve_memories(category=\"*\", is_global=False)`\n   - Note: If you want to retrieve all global memories, use `retrieve_memories(category=\"*\", is_global=True)`\n - **Filter by Tags**:\n   - Enables targeted retrieval based on specific tags.\n   - Use: Provide tag filters to refine search.\nTo remove a memory, use the following protocol:\n- **Remove by Category**:\n  - Removes all memories within the specified category.\n  - Use: `remove_memory_category(category=\"development\", is_global=False)`\n  - Note: If you want to remove all local memories, use `remove_memory_category(category=\"*\", is_global=False)`\n  - Note: If you want to remove all global memories, use `remove_memory_category(category=\"*\", is_global=True)`\nThe Protocol is:\n 1. Confirm what kind of information the user seeks by category or keyword.\n 2. Suggest categories or relevant tags based on the user's request.\n 3. Use the retrieve function to access relevant memory entries.\n 4. Present a summary of findings, offering detailed exploration upon request.\n Example Interaction for Retrieving Information:\n User: \"What configuration do we use for code formatting?\"\n Assistant: \"Let me check the 'development' category for any related memories. Searching using #formatting tag.\"\n Assistant: *Executes retrieval: `retrieve_memories(category=\"development\", is_global=False)`*\n Assistant: \"We have 'black' configured for code formatting, specific to this project. Would you like further\n details?\"\n Memory Overview:\n - Categories can include a wide range of topics, structured to keep information grouped logically.\n - Tags enable quick filtering and identification of specific entries.\n Operational Guidelines:\n - Always confirm with the user before saving information.\n - Propose suitable categories and tag suggestions.\n - Discuss storage scope thoroughly to align with user needs.\n - Acknowledge the user about what is stored and where, for transparency and ease of future retrieval.\n\n\n**Here are the user's currently saved memories:**\nPlease keep this information in mind when answering future questions.\nDo not bring up memories unless relevant.\nNote: if the user has not saved any memories, this section will be empty.\nNote: if the user removes a memory that was previously loaded into the system, please remove it from the system instructions.\n\n## rsfilesystem\n\n\n## skills\n\n### Instructions\nYou have these skills at your disposal, when it is clear they can help you solve a problem or you are asked to use them:\n\n- goose-doc-guide: Reference goose documentation to create, configure, or explain goose-specific features like recipes, extensions, sessions, and providers. You MUST fetch relevant goose docs before answering. You MUST NOT rely on training data or assumptions for any goose-specific fields, values, names, syntax, or commands.\n\n## todo\n\n### Instructions\nYour todo content is automatically available in your context.\n\nWorkflow:\n- Start: write initial checklist\n- During: update progress\n- End: verify all complete\n\nTemplate:\n- [x] Requirement 1\n- [ ] Task\n  - [ ] Sub-task\n- [ ] Requirement 2\n- [ ] Another task\n\n\n# Suggestion\n\nThe user currently has enabled 9 extensions with a total of 37 tools.\nSince this exceeds the recommended limits (5 extensions or 50 tools),\nyou should ask the user if they would like to disable some extensions for this session.\n\nUse the search_available_extensions tool to find extensions available to disable.\nYou should only disable extensions found from the search_available_extensions tool.\nList all the extensions available to disable in the response.\nExplain that minimizing extensions helps with the recall of the correct tools to use.\n\n# Response Guidelines\n\n- Use Markdown formatting for all responses.\n- Follow best practices for Markdown, including:\n    - Using headers for organization.\n    - Bullet points for lists.\n    - Links formatted correctly, either as linked text (e.g., [this is linked text](https://example.com)) or automatic\n      links using angle brackets (e.g., <http://example.com/>).\n- For code examples, use fenced code blocks by placing triple backticks (` ``` `) before and after the code. Include the\n  language identifier after the opening backticks (e.g., ` ```python `) to enable syntax highlighting.\n- Ensure clarity, conciseness, and proper formatting to enhance readability and usability.\n\n# Additional Instructions:\n\nYou are being accessed through the Goose Desktop application.\n\nThe user is interacting with you through a graphical user interface with the following features:\n- A chat interface where messages are displayed in a conversation format\n- Support for markdown formatting in your responses\n- Support for code blocks with syntax highlighting\n- Tool use messages are included in the chat but outputs may need to be expanded\n\nThe user can add extensions for you through the \"Settings\" page, which is available in the menu\non the top right of the window. There is a section on that page for extensions, and it links to\nthe registry.\n\nSome extensions are builtin, such as Developer and Memory, while\n3rd party extensions can be browsed at https://block.github.io/goose/v1/extensions/."
+      },
+      {
+        "role": "user",
+        "content": "We've downloaded the complete contents of this thread from 4chan into this file: /Users/au/claude/goose/epstein/story_time_dead_man.txt\n\nYour task is to create a single Markdown file that is well-organized so that it makes this guy's story easy to read and comprehend. Don't change any of the text itself. What I mean by \"easy to read and comprehend\" is that his posts should be organized in order, and the questions to him are quoted above his answers so that the entire thread is easy to follow. Okay?\n\nName the new markdown file story.md\n\nNote: the source file is 117KB in size. You will probably need to write a python script to split it up into sub-files and then process them individually.\n\nDO NOT read the entire file at once!!! As I warned you, SPLIT IT UP into sub-files first.\n<info-msg>\nIt is currently 2026-02-04 22:40:00\nWorking directory: /Users/au/claude/goose/epstein\n\nCurrent tasks and notes:\nOnce given a task, immediately update your todo with all explicit and implicit requirements\n\n</info-msg>"
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "call_d002389462224bcca2233c43",
+            "type": "function",
+            "function": {
+              "name": "developer__shell",
+              "arguments": "{\"command\":\"ls -l /Users/au/claude/goose/epstein/story_time_dead_man.txt\"}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "-rw-r--r--@ 1 au  staff  117028 Feb  3 10:01 /Users/au/claude/goose/epstein/story_time_dead_man.txt\n",
+        "tool_call_id": "call_d002389462224bcca2233c43"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "computercontroller__automation_script",
+          "description": "\n            Create and run small scripts for automation tasks.\n            Supports Shell and Ruby (on macOS).\n\n            The script is saved to a temporary file and executed.\n            Consider using shell script (bash) for most simple tasks first.\n            Ruby is useful for text processing or when you need more sophisticated scripting capabilities.\n            Some examples of shell:\n                - create a sorted list of unique lines: sort file.txt | uniq\n                - extract 2nd column in csv: awk -F ',' '{ print $2}'\n                - pattern matching: grep pattern file.txt\n        ",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "AutomationScriptParams",
+            "description": "Parameters for the automation_script tool",
+            "type": "object",
+            "properties": {
+              "language": {
+                "description": "The scripting language to use",
+                "$ref": "#/$defs/ScriptLanguage"
+              },
+              "script": {
+                "description": "The script content",
+                "type": "string"
+              },
+              "save_output": {
+                "description": "Whether to save the script output to a file",
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "required": [
+              "language",
+              "script"
+            ],
+            "$defs": {
+              "ScriptLanguage": {
+                "description": "Enum for language parameter in automation_script tool",
+                "oneOf": [
+                  {
+                    "description": "Shell/Bash script",
+                    "type": "string",
+                    "const": "shell"
+                  },
+                  {
+                    "description": "Batch script (Windows)",
+                    "type": "string",
+                    "const": "batch"
+                  },
+                  {
+                    "description": "Ruby script",
+                    "type": "string",
+                    "const": "ruby"
+                  },
+                  {
+                    "description": "PowerShell script",
+                    "type": "string",
+                    "const": "powershell"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "computercontroller__cache",
+          "description": "\n            Manage cached files and data:\n            - list: List all cached files\n            - view: View content of a cached file\n            - delete: Delete a cached file\n            - clear: Clear all cached files\n        ",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "CacheParams",
+            "description": "Parameters for the cache tool",
+            "type": "object",
+            "properties": {
+              "command": {
+                "description": "The command to perform",
+                "$ref": "#/$defs/CacheCommand"
+              },
+              "path": {
+                "description": "Path to the cached file for view/delete commands",
+                "type": "string",
+                "nullable": true
+              }
+            },
+            "required": [
+              "command"
+            ],
+            "$defs": {
+              "CacheCommand": {
+                "description": "Enum for command parameter in cache tool",
+                "oneOf": [
+                  {
+                    "description": "List all cached files",
+                    "type": "string",
+                    "const": "list"
+                  },
+                  {
+                    "description": "View content of a cached file",
+                    "type": "string",
+                    "const": "view"
+                  },
+                  {
+                    "description": "Delete a cached file",
+                    "type": "string",
+                    "const": "delete"
+                  },
+                  {
+                    "description": "Clear all cached files",
+                    "type": "string",
+                    "const": "clear"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "computercontroller__computer_control",
+          "description": "\n            Control the computer using AppleScript (macOS only). Automate applications and system features.\n\n            Key capabilities:\n            - Control Applications: Launch, quit, manage apps (Mail, Safari, iTunes, etc)\n                - Interact with app-specific feature: (e.g, edit documents, process photos)\n                - Perform tasks in third-party apps that support AppleScript\n            - UI Automation: Simulate user interactions like, clicking buttons, select menus, type text, filling out forms\n            - System Control: Manage settings (volume, brightness, wifi), shutdown/restart, monitor events\n            - Web & Email: Open URLs, web automation, send/organize emails, handle attachments\n            - Media: Manage music libraries, photo collections, playlists\n            - File Operations: Organize files/folders\n            - Integration: Calendar, reminders, messages\n            - Data: Interact with spreadsheets and documents\n\n            Can be combined with screenshot tool for visual task assistance.\n        ",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "ComputerControlParams",
+            "description": "Parameters for the computer_control tool",
+            "type": "object",
+            "properties": {
+              "script": {
+                "description": "The automation script content (PowerShell for Windows, AppleScript for macOS)",
+                "type": "string"
+              },
+              "save_output": {
+                "description": "Whether to save the script output to a file",
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "required": [
+              "script"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "computercontroller__docx_tool",
+          "description": "\n            Process DOCX files to extract text and create/update documents.\n            Supports operations:\n            - extract_text: Extract all text content and structure (headings, TOC) from the DOCX\n            - update_doc: Create a new DOCX or update existing one with provided content\n              Modes:\n              - append: Add content to end of document (default)\n              - replace: Replace specific text with new content\n              - structured: Add content with specific heading level and styling\n              - add_image: Add an image to the document (with optional caption)\n\n            Use this when there is a .docx file that needs to be processed or created.\n        ",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "DocxToolParams",
+            "description": "Parameters for the docx_tool",
+            "type": "object",
+            "properties": {
+              "path": {
+                "description": "Path to the DOCX file",
+                "type": "string"
+              },
+              "operation": {
+                "description": "Operation to perform on the DOCX",
+                "$ref": "#/$defs/DocxOperation"
+              },
+              "content": {
+                "description": "Content to write (required for update_doc operation)",
+                "type": "string",
+                "nullable": true
+              },
+              "params": {
+                "description": "Additional parameters for update_doc operation",
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/DocxUpdateParams"
+                  },
+                  {
+                    "const": null,
+                    "nullable": true
+                  }
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "operation"
+            ],
+            "$defs": {
+              "DocxOperation": {
+                "description": "Enum for operation parameter in docx_tool",
+                "oneOf": [
+                  {
+                    "description": "Extract all text content and structure from the DOCX",
+                    "type": "string",
+                    "const": "extract_text"
+                  },
+                  {
+                    "description": "Create a new DOCX or update existing one with provided content",
+                    "type": "string",
+                    "const": "update_doc"
+                  }
+                ]
+              },
+              "DocxUpdateParams": {
+                "description": "Additional parameters for update_doc operation",
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "description": "Update mode (default: append)",
+                    "$ref": "#/$defs/DocxUpdateMode",
+                    "default": "append"
+                  },
+                  "old_text": {
+                    "description": "Text to replace (required for replace mode)",
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "level": {
+                    "description": "Heading level for structured mode (e.g., 'Heading1', 'Heading2')",
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "image_path": {
+                    "description": "Path to the image file (required for add_image mode)",
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "width": {
+                    "description": "Image width in pixels (optional)",
+                    "type": "integer",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "nullable": true
+                  },
+                  "height": {
+                    "description": "Image height in pixels (optional)",
+                    "type": "integer",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "nullable": true
+                  },
+                  "style": {
+                    "description": "Styling options for the text",
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/DocxTextStyle"
+                      },
+                      {
+                        "const": null,
+                        "nullable": true
+                      }
+                    ]
+                  }
+                }
+              },
+              "DocxUpdateMode": {
+                "description": "Enum for update mode in docx_tool params",
+                "oneOf": [
+                  {
+                    "description": "Add content to end of document (default)",
+                    "type": "string",
+                    "const": "append"
+                  },
+                  {
+                    "description": "Replace specific text with new content",
+                    "type": "string",
+                    "const": "replace"
+                  },
+                  {
+                    "description": "Add content with specific heading level and styling",
+                    "type": "string",
+                    "const": "structured"
+                  },
+                  {
+                    "description": "Add an image to the document (with optional caption)",
+                    "type": "string",
+                    "const": "add_image"
+                  }
+                ]
+              },
+              "DocxTextStyle": {
+                "description": "Styling options for text in docx_tool",
+                "type": "object",
+                "properties": {
+                  "bold": {
+                    "description": "Make text bold",
+                    "type": "boolean",
+                    "nullable": true
+                  },
+                  "italic": {
+                    "description": "Make text italic",
+                    "type": "boolean",
+                    "nullable": true
+                  },
+                  "underline": {
+                    "description": "Make text underlined",
+                    "type": "boolean",
+                    "nullable": true
+                  },
+                  "size": {
+                    "description": "Font size in points",
+                    "type": "integer",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "nullable": true
+                  },
+                  "color": {
+                    "description": "Text color in hex format (e.g., 'FF0000' for red)",
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "alignment": {
+                    "description": "Text alignment",
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TextAlignment"
+                      },
+                      {
+                        "const": null,
+                        "nullable": true
+                      }
+                    ]
+                  }
+                }
+              },
+              "TextAlignment": {
+                "description": "Enum for text alignment in docx_tool params",
+                "oneOf": [
+                  {
+                    "description": "Left alignment",
+                    "type": "string",
+                    "const": "left"
+                  },
+                  {
+                    "description": "Center alignment",
+                    "type": "string",
+                    "const": "center"
+                  },
+                  {
+                    "description": "Right alignment",
+                    "type": "string",
+                    "const": "right"
+                  },
+                  {
+                    "description": "Justified alignment",
+                    "type": "string",
+                    "const": "justified"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "computercontroller__pdf_tool",
+          "description": "\n            Process PDF files to extract text and images.\n            Supports operations:\n            - extract_text: Extract all text content from the PDF\n            - extract_images: Extract and save embedded images to PNG files\n\n            Use this when there is a .pdf file or files that need to be processed.\n        ",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "PdfToolParams",
+            "type": "object",
+            "properties": {
+              "path": {
+                "description": "Path to the PDF file",
+                "type": "string"
+              },
+              "operation": {
+                "description": "Operation to perform on the PDF",
+                "$ref": "#/$defs/PdfOperation"
+              }
+            },
+            "required": [
+              "path",
+              "operation"
+            ],
+            "$defs": {
+              "PdfOperation": {
+                "description": "Parameters for the pdf_tool\nEnum for operation parameter in pdf_tool",
+                "oneOf": [
+                  {
+                    "description": "Extract all text content from the PDF",
+                    "type": "string",
+                    "const": "extract_text"
+                  },
+                  {
+                    "description": "Extract and save embedded images to PNG files",
+                    "type": "string",
+                    "const": "extract_images"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "computercontroller__web_scrape",
+          "description": "\n            Fetch and save content from a web page. The content can be saved as:\n            - text (for HTML pages)\n            - json (for API responses)\n            - binary (for images and other files)\n            Returns 'Content saved to: <path>'. Use cache to read the content.\n        ",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "WebScrapeParams",
+            "description": "Parameters for the web_scrape tool",
+            "type": "object",
+            "properties": {
+              "url": {
+                "description": "The URL to fetch content from",
+                "type": "string"
+              },
+              "save_as": {
+                "description": "Format of the response.",
+                "$ref": "#/$defs/SaveAsFormat",
+                "default": "text"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "$defs": {
+              "SaveAsFormat": {
+                "description": "Enum for save_as parameter in web_scrape tool",
+                "oneOf": [
+                  {
+                    "description": "Save as text (for HTML pages)",
+                    "type": "string",
+                    "const": "text"
+                  },
+                  {
+                    "description": "Save as JSON (for API responses)",
+                    "type": "string",
+                    "const": "json"
+                  },
+                  {
+                    "description": "Save as binary (for images and other files)",
+                    "type": "string",
+                    "const": "binary"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "computercontroller__xlsx_tool",
+          "description": "\n            Process Excel (XLSX) files to read and manipulate spreadsheet data.\n            Supports operations:\n            - list_worksheets: List all worksheets in the workbook (returns name, index, column_count, row_count)\n            - get_columns: Get column names from a worksheet (returns values from the first row)\n            - get_range: Get values and formulas from a cell range (e.g., 'A1:C10') (returns a 2D array organized as [row][column])\n            - find_text: Search for text in a worksheet (returns a list of (row, column) coordinates)\n            - update_cell: Update a single cell's value (returns confirmation message)\n            - get_cell: Get value and formula from a specific cell (returns both value and formula if present)\n            - save: Save changes back to the file (returns confirmation message)\n\n            Use this when working with Excel spreadsheets to analyze or modify data.\n        ",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "XlsxToolParams",
+            "type": "object",
+            "properties": {
+              "path": {
+                "description": "Path to the XLSX file",
+                "type": "string"
+              },
+              "operation": {
+                "description": "Operation to perform on the XLSX file",
+                "$ref": "#/$defs/XlsxOperation"
+              },
+              "worksheet": {
+                "description": "Worksheet name (if not provided, uses first worksheet)",
+                "type": "string",
+                "nullable": true
+              },
+              "range": {
+                "description": "Cell range in A1 notation (e.g., 'A1:C10') for get_range operation",
+                "type": "string",
+                "nullable": true
+              },
+              "search_text": {
+                "description": "Text to search for in find_text operation",
+                "type": "string",
+                "nullable": true
+              },
+              "case_sensitive": {
+                "description": "Whether search should be case-sensitive",
+                "type": "boolean",
+                "default": false
+              },
+              "row": {
+                "description": "Row number for update_cell and get_cell operations",
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "nullable": true
+              },
+              "col": {
+                "description": "Column number for update_cell and get_cell operations",
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "nullable": true
+              },
+              "value": {
+                "description": "New value for update_cell operation",
+                "type": "string",
+                "nullable": true
+              }
+            },
+            "required": [
+              "path",
+              "operation"
+            ],
+            "$defs": {
+              "XlsxOperation": {
+                "description": "Parameters for the xlsx_tool\nEnum for operation parameter in xlsx_tool",
+                "oneOf": [
+                  {
+                    "description": "List all worksheets in the workbook",
+                    "type": "string",
+                    "const": "list_worksheets"
+                  },
+                  {
+                    "description": "Get column names from a worksheet",
+                    "type": "string",
+                    "const": "get_columns"
+                  },
+                  {
+                    "description": "Get values and formulas from a cell range",
+                    "type": "string",
+                    "const": "get_range"
+                  },
+                  {
+                    "description": "Search for text in a worksheet",
+                    "type": "string",
+                    "const": "find_text"
+                  },
+                  {
+                    "description": "Update a single cell's value",
+                    "type": "string",
+                    "const": "update_cell"
+                  },
+                  {
+                    "description": "Get value and formula from a specific cell",
+                    "type": "string",
+                    "const": "get_cell"
+                  },
+                  {
+                    "description": "Save changes back to the file",
+                    "type": "string",
+                    "const": "save"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "developer__analyze",
+          "description": "Analyze code structure in 3 modes: 1) Directory overview - file tree with LOC/function/class counts to max_depth. 2) File details - functions, classes, imports. 3) Symbol focus - call graphs across directory to max_depth (requires directory path, case-sensitive). Typical flow: directory \u2192 files \u2192 symbols. Functions called >3x show \u2022N.",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "AnalyzeParams",
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "focus": {
+                "type": "string",
+                "nullable": true
+              },
+              "follow_depth": {
+                "description": "Call graph depth. 0=where defined, 1=direct callers/callees, 2+=transitive chains",
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0,
+                "default": 2
+              },
+              "max_depth": {
+                "description": "Directory recursion limit. 0=unlimited (warning: fails on binary files)",
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0,
+                "default": 3
+              },
+              "ast_recursion_limit": {
+                "description": "Maximum depth for recursive AST traversal (prevents stack overflow in deeply nested code)",
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0,
+                "default": null,
+                "nullable": true
+              },
+              "force": {
+                "description": "Allow large outputs without warning (default: false)",
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "developer__image_processor",
+          "description": "Process an image file from disk. Resizes to max 1024px, converts to JPEG (85% quality), and returns as base64 data for optimized LLM consumption.",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "ImageProcessorParams",
+            "description": "Parameters for the image_processor tool",
+            "type": "object",
+            "properties": {
+              "path": {
+                "description": "Absolute path to the image file to process",
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "developer__list_windows",
+          "description": "List all available window titles that can be used with screen_capture. Returns a list of window titles that can be used with the window_title parameter of the screen_capture tool.",
+          "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "developer__screen_capture",
+          "description": "Capture a screenshot of a specified display or window. You can capture either: 1. A full display (monitor) using the display parameter 2. A specific window by its title using the window_title parameter. Only one of display or window_title should be specified.",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "ScreenCaptureParams",
+            "description": "Parameters for the screen_capture tool",
+            "type": "object",
+            "properties": {
+              "display": {
+                "description": "The display number to capture (0 is main display)",
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "default": null,
+                "nullable": true
+              },
+              "window_title": {
+                "description": "Optional: the exact title of the window to capture.\nUse the list_windows tool to find the available windows.",
+                "type": "string",
+                "nullable": true
+              }
+            },
+            "required": []
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "developer__shell",
+          "description": "Execute a command in the shell.This will return the output and error concatenated into a single string, as you would see from running on the command line. There will also be an indication of if the command succeeded or failed. Avoid commands that produce a large amount of output, and consider piping those outputs to files. If you need to run a long lived command, background it - e.g. `uvicorn main:app &` so that this tool does not run indefinitely.",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "ShellParams",
+            "description": "Parameters for the shell tool",
+            "type": "object",
+            "properties": {
+              "command": {
+                "description": "The command string to execute in the shell",
+                "type": "string"
+              }
+            },
+            "required": [
+              "command"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "developer__text_editor",
+          "description": "Perform text editing operations on files. Commands: view (show file content), write (create/overwrite file), str_replace (edit file), insert (insert at line), undo_edit (undo last change).",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "TextEditorParams",
+            "description": "Parameters for the text_editor tool",
+            "type": "object",
+            "properties": {
+              "path": {
+                "description": "Absolute path to file or directory, e.g. `/repo/file.py` or `/repo`.",
+                "type": "string"
+              },
+              "command": {
+                "description": "The operation to perform. Allowed options are: `view`, `write`, `str_replace`, `insert`, `undo_edit`.",
+                "type": "string"
+              },
+              "diff": {
+                "description": "Unified diff to apply. Supports editing multiple files simultaneously. Cannot create or delete files\nExample: \"--- a/file\\n+++ b/file\\n@@ -1,3 +1,3 @@\\n context\\n-old\\n+new\\n context\"\nPreferred edit method.",
+                "type": "string",
+                "nullable": true
+              },
+              "view_range": {
+                "description": "Optional array of two integers specifying the start and end line numbers to view.\nLine numbers are 1-indexed, and -1 for the end line means read to the end of the file.\nThis parameter only applies when viewing files, not directories.",
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "nullable": true
+              },
+              "file_text": {
+                "description": "The content to write to the file. Required for `write` command.",
+                "type": "string",
+                "nullable": true
+              },
+              "old_str": {
+                "description": "The old string to replace.",
+                "type": "string",
+                "nullable": true
+              },
+              "new_str": {
+                "description": "The new string to replace with. Required for `insert` command.",
+                "type": "string",
+                "nullable": true
+              },
+              "insert_line": {
+                "description": "The line number after which to insert text (0 for beginning). Required for `insert` command.",
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              }
+            },
+            "required": [
+              "path",
+              "command"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "extensionmanager__list_resources",
+          "description": "List resources from an extension(s).\n\nResources allow extensions to share data that provide context to LLMs, such as\nfiles, database schemas, or application-specific information. This tool lists resources\nin the provided extension, and returns a list for the user to browse. If no extension\nis provided, the tool will search all extensions for the resource.\n",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "ListResourcesParams",
+            "type": "object",
+            "properties": {
+              "extension_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": []
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "extensionmanager__manage_extensions",
+          "description": "Tool to manage extensions and tools in goose context.\n            Enable or disable extensions to help complete tasks.\n            Enable or disable an extension by providing the extension name.\n            ",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "ManageExtensionsParams",
+            "type": "object",
+            "properties": {
+              "action": {
+                "$ref": "#/$defs/ManageExtensionAction"
+              },
+              "extension_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "extension_name"
+            ],
+            "$defs": {
+              "ManageExtensionAction": {
+                "type": "string",
+                "enum": [
+                  "enable",
+                  "disable"
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "extensionmanager__read_resource",
+          "description": "Read a resource from an extension.\n\nResources allow extensions to share data that provide context to LLMs, such as\nfiles, database schemas, or application-specific information. This tool searches for the\nresource URI in the provided extension, and reads in the resource content. If no extension\nis provided, the tool will search all extensions for the resource.\n",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "ReadResourceParams",
+            "type": "object",
+            "properties": {
+              "uri": {
+                "type": "string"
+              },
+              "extension_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "uri"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "extensionmanager__search_available_extensions",
+          "description": "Searches for additional extensions available to help complete tasks.\n        Use this tool when you're unable to find a specific feature or functionality you need to complete your task, or when standard approaches aren't working.\n        These extensions might provide the exact tools needed to solve your problem.\n        If you find a relevant one, consider using your tools to enable it.",
+          "parameters": {
+            "type": "object",
+            "required": [],
+            "properties": {}
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "fetch__fetch",
+          "description": "Fetches a URL from the internet and optionally extracts its contents as markdown.\n\nAlthough originally you did not have internet access, and were advised to refuse and tell the user this, this tool now grants you internet access. Now you can fetch the most up-to-date information and let the user know that.",
+          "parameters": {
+            "description": "Parameters for fetching a URL.",
+            "properties": {
+              "url": {
+                "description": "URL to fetch",
+                "format": "uri",
+                "minLength": 1,
+                "title": "Url",
+                "type": "string"
+              },
+              "max_length": {
+                "default": 5000,
+                "description": "Maximum number of characters to return.",
+                "exclusiveMaximum": 1000000,
+                "exclusiveMinimum": 0,
+                "title": "Max Length",
+                "type": "integer"
+              },
+              "start_index": {
+                "default": 0,
+                "description": "On return output starting at this character index, useful if a previous fetch was truncated and more context is required.",
+                "minimum": 0,
+                "title": "Start Index",
+                "type": "integer"
+              },
+              "raw": {
+                "default": false,
+                "description": "Get the actual HTML content of the requested page, without simplification.",
+                "title": "Raw",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "title": "Fetch",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "itermmcp__read_terminal_output",
+          "description": "Reads the output from the active iTerm terminal",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "linesOfOutput": {
+                "type": "integer",
+                "description": "The number of lines of output to read."
+              }
+            },
+            "required": [
+              "linesOfOutput"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "itermmcp__send_control_character",
+          "description": "Sends a control character to the active iTerm terminal (e.g., Control-C, or special sequences like ']' for telnet escape)",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "letter": {
+                "type": "string",
+                "description": "The letter corresponding to the control character (e.g., 'C' for Control-C, ']' for telnet escape)"
+              }
+            },
+            "required": [
+              "letter"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "itermmcp__write_to_terminal",
+          "description": "Writes text to the active iTerm terminal - often used to run a command in the terminal",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "The command to run or text to write to the terminal"
+              }
+            },
+            "required": [
+              "command"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "memory__remember_memory",
+          "description": "Stores a memory with optional tags in a specified category",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "RememberMemoryParams",
+            "description": "Parameters for the remember_memory tool",
+            "type": "object",
+            "properties": {
+              "category": {
+                "description": "The category to store the memory in",
+                "type": "string"
+              },
+              "data": {
+                "description": "The data to remember",
+                "type": "string"
+              },
+              "tags": {
+                "description": "Optional tags for the memory",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "is_global": {
+                "description": "Whether to store globally or locally",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "category",
+              "data",
+              "is_global"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "memory__remove_memory_category",
+          "description": "Removes all memories within a specified category",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "RemoveMemoryCategoryParams",
+            "description": "Parameters for the remove_memory_category tool",
+            "type": "object",
+            "properties": {
+              "category": {
+                "description": "The category to remove (use \"*\" for all)",
+                "type": "string"
+              },
+              "is_global": {
+                "description": "Whether to remove from global or local storage",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "category",
+              "is_global"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "memory__remove_specific_memory",
+          "description": "Removes a specific memory within a specified category",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "RemoveSpecificMemoryParams",
+            "description": "Parameters for the remove_specific_memory tool",
+            "type": "object",
+            "properties": {
+              "category": {
+                "description": "The category containing the memory",
+                "type": "string"
+              },
+              "memory_content": {
+                "description": "The content of the memory to remove",
+                "type": "string"
+              },
+              "is_global": {
+                "description": "Whether to remove from global or local storage",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "category",
+              "memory_content",
+              "is_global"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "memory__retrieve_memories",
+          "description": "Retrieves all memories from a specified category",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "RetrieveMemoriesParams",
+            "description": "Parameters for the retrieve_memories tool",
+            "type": "object",
+            "properties": {
+              "category": {
+                "description": "The category to retrieve memories from (use \"*\" for all)",
+                "type": "string"
+              },
+              "is_global": {
+                "description": "Whether to retrieve from global or local storage",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "category",
+              "is_global"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "platform__manage_schedule",
+          "description": "Manage goose's internal scheduled recipe execution.\n\nActions:\n- \"list\": List all goose scheduled jobs\n- \"create\": Create a new goose scheduled job from a recipe file\n- \"run_now\": Execute a goose scheduled job immediately\n- \"pause\": Pause a goose scheduled job\n- \"unpause\": Resume a paused goose scheduled job\n- \"delete\": Remove a goose scheduled job\n- \"kill\": Terminate a currently running goose scheduled job\n- \"inspect\": Get details about a running goose scheduled job\n- \"sessions\": List execution history for a goose scheduled job\n- \"session_content\": Get the full content (messages) of a specific session\n",
+          "parameters": {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "list",
+                  "create",
+                  "run_now",
+                  "pause",
+                  "unpause",
+                  "delete",
+                  "kill",
+                  "inspect",
+                  "sessions",
+                  "session_content"
+                ]
+              },
+              "job_id": {
+                "type": "string",
+                "description": "Job identifier for operations on existing jobs"
+              },
+              "recipe_path": {
+                "type": "string",
+                "description": "Path to recipe file for create action"
+              },
+              "cron_expression": {
+                "type": "string",
+                "description": "A cron expression for create action. Supports both 5-field (minute hour day month weekday) and 6-field (second minute hour day month weekday) formats. 5-field expressions are automatically converted to 6-field by prepending '0' for seconds."
+              },
+              "limit": {
+                "type": "integer",
+                "description": "Limit for sessions list",
+                "default": 50
+              },
+              "session_id": {
+                "type": "string",
+                "description": "Session identifier for session_content action"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "rsfilesystem__create_directory",
+          "description": "Create a new directory",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path to the new directory"
+              },
+              "commit_message": {
+                "type": "string",
+                "description": "Message describing the purpose of this directory creation"
+              }
+            },
+            "required": [
+              "path",
+              "commit_message"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "rsfilesystem__file_edit",
+          "description": "Replace exact text content in a file with optional git commit. Returns error if content not found or if there are multiple matches.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "old_content": {
+                "type": "string",
+                "description": "Exact content to replace (must match uniquely)"
+              },
+              "new_content": {
+                "type": "string",
+                "description": "Content to insert instead"
+              },
+              "commit_message": {
+                "type": "string",
+                "description": "Message describing the purpose of this edit"
+              },
+              "file_path": {
+                "type": "string",
+                "description": "Path to the file to edit"
+              }
+            },
+            "required": [
+              "file_path",
+              "old_content",
+              "new_content",
+              "commit_message"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "rsfilesystem__get_current_time_in_city",
+          "description": "Get the current time in the city",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "city": {
+                "type": "string",
+                "description": "city name"
+              }
+            },
+            "required": [
+              "city"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "rsfilesystem__get_file_info",
+          "description": "Get metadata about a file",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path to file to get info about"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "rsfilesystem__get_local_time",
+          "description": "Get the current local time",
+          "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "rsfilesystem__grep_search",
+          "description": "Search for a pattern in files or directories. For recursive searches, the path must be a directory. For non-recursive searches, the path must exist.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "case_sensitive": {
+                "type": "boolean",
+                "description": "Whether the search should be case sensitive. Defaults to true."
+              },
+              "pattern": {
+                "type": "string",
+                "description": "Pattern to search for"
+              },
+              "path": {
+                "type": "string",
+                "description": "Path to search in. For recursive searches this must be a directory."
+              },
+              "recursive": {
+                "type": "boolean",
+                "description": "Whether to search recursively in subdirectories. Defaults to true."
+              }
+            },
+            "required": [
+              "pattern",
+              "path"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "rsfilesystem__list_directory",
+          "description": "List contents of a directory",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path to directory to list"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "rsfilesystem__move_or_rename",
+          "description": "Move or rename a file or directory",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "target_path": {
+                "type": "string",
+                "description": "Target path to move/rename to"
+              },
+              "source_path": {
+                "type": "string",
+                "description": "Source path to move/rename from"
+              },
+              "commit_message": {
+                "type": "string",
+                "description": "Message describing the purpose of this move/rename"
+              }
+            },
+            "required": [
+              "source_path",
+              "target_path",
+              "commit_message"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "rsfilesystem__overwrite_file",
+          "description": "Overwrite the contents of a file",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path to the file to overwrite"
+              },
+              "content": {
+                "type": "string",
+                "description": "New content to write"
+              }
+            },
+            "required": [
+              "path",
+              "content"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "rsfilesystem__read_file",
+          "description": "Read the contents of a file",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "file_path": {
+                "type": "string",
+                "description": "Path to the file to read"
+              }
+            },
+            "required": [
+              "file_path"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "skills__loadSkill",
+          "description": "Load a skill by name and return its content.\n\nThis tool loads the specified skill and returns its body content along with\ninformation about any supporting files in the skill directory.\n",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "LoadSkillParams",
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "subagent",
+          "description": "Delegate a task to a subagent that runs independently with its own context.\n\nModes:\n1. Ad-hoc: Provide `instructions` for a custom task\n2. Predefined: Provide `subrecipe` name to run a predefined task\n3. Augmented: Provide both `subrecipe` and `instructions` to add context\n\nThe subagent has access to the same tools as you by default. Use `extensions` to limit which extensions the subagent can use.\n\nFor parallel execution, make multiple `subagent` tool calls in the same message.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instructions": {
+                "type": "string",
+                "description": "Instructions for the subagent. Required for ad-hoc tasks. For predefined tasks, adds additional context."
+              },
+              "subrecipe": {
+                "type": "string",
+                "description": "Name of a predefined subrecipe to run."
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Parameters for the subrecipe. Only valid when 'subrecipe' is specified.",
+                "properties": {},
+                "required": []
+              },
+              "extensions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Extensions to enable. Omit to inherit all, empty array for none."
+              },
+              "settings": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "description": "Override LLM provider"
+                  },
+                  "model": {
+                    "type": "string",
+                    "description": "Override model"
+                  },
+                  "temperature": {
+                    "type": "number",
+                    "description": "Override temperature"
+                  },
+                  "max_turns": {
+                    "type": "number",
+                    "description": "Override max turns"
+                  }
+                },
+                "description": "Override model/provider/settings.",
+                "required": []
+              },
+              "summary": {
+                "type": "boolean",
+                "default": true,
+                "description": "If true (default), return only the subagent's final summary."
+              }
+            },
+            "required": []
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "todo__todo_write",
+          "description": "Overwrite the entire TODO content.\n\nThe content persists across conversation turns and compaction. Use this for:\n- Task tracking and progress updates\n- Important notes and reminders\n\nWARNING: This operation completely replaces the existing content. Always include\nall content you want to keep, not just the changes.\n",
+          "parameters": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "TodoWriteParams",
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "content"
+            ]
+          }
+        }
+      }
+    ],
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    }
+  }
+}

@@ -190,6 +190,8 @@ curl -X POST "http://127.0.0.1:5847/unload?model=ms/gemma3:12.2b-q8_0"
 | `DEFAULT_PARALLEL` | 1 | Slots per model (1 = single-user, saves memory; 4 = multi-user) |
 | `BRIDGE_SYNC_INTERVAL` | 3600 | Seconds between automatic syncs (when using start.sh) |
 | `HARMONY_MODELS_CONFIG` | harmony_models.yaml | Path to Harmony models config file |
+| `LM_STUDIO_BASE` | http://127.0.0.1:1234 | LM Studio backend URL (for models with `backend: lm_studio`) |
+| `LMS_CLI_PATH` | lms | Path to LM Studio CLI (for auto-start) |
 
 ### Models Directory Structure
 
@@ -241,6 +243,13 @@ models:
     sampler_args: "--top-nsigma 1.5 --min-p 0.05 --temp 0.4"
     ctx_size: 32768
     ttl: 3600  # Keep loaded longer for coding sessions
+
+  # LM Studio backend - route model to LM Studio instead of llama-swap
+  my-lm-studio-model:
+    backend: lm_studio
+    lm_studio_model: "model-name@quantization"  # Model identifier in LM Studio (from lms ls)
+    sampler_args: --temp 0.4 --min-p 0.05 --top-p 0.95
+    ctx_size: 32768
 ```
 
 Available settings:
@@ -249,6 +258,18 @@ Available settings:
 - `ttl`: Custom idle timeout in seconds
 - `base_model`: Create an alias pointing to another model's file (same GGUF, different settings)
 - `cmd`: Full command override (use `${MODEL_PATH}` and `${PORT}` placeholders)
+- `backend`: Route to different backend - `llama_swap` (default), `ollama`, or `lm_studio`
+- `lm_studio_model`: Model identifier for LM Studio backend (if different from model name)
+
+**LM Studio backend setup:**
+
+1. Open LM Studio GUI and load the model you want to use
+2. Enable the local server: Developer tab > Local Server > Start Server
+3. The proxy will route requests to LM Studio on port 1234
+
+**Note:** LM Studio's headless mode (`lms server start`) has a known issue where it cannot auto-load models. You must load models in the GUI before using them via the API.
+
+**Supported parameters for LM Studio:** LM Studio's REST API is OpenAI-compatible and supports `temperature`, `top_p`, `top_k`, `min_p`, and `repeat_penalty` from `sampler_args`. However, `--top-nsigma` and `--repeat-last-n` are llama.cpp-specific and not supported via LM Studio.
 
 **Sampler args** (passed to llama-server via `sampler_args`):
 

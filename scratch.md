@@ -1,0 +1,9 @@
+qwen3.5:9b-q8_0          
+qwen3.5:4b-q8_0          
+qwen3.5:2b-q8_0          
+qwen3.5:35b-a3b-q8_0     
+qwen3.5:0.8b-q8_0        
+qwen3.5:27b-q8_0         
+qwen3.5:27b-q4_K_M       
+qwen3.5:35b-a3b-q4_K_M   
+qwen3.5:122b-a10b-q4_K_M 

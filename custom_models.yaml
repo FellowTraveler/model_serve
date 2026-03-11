@@ -10,7 +10,8 @@ models:
     ctx_size: 65536
     jinja: false
   gpt-oss-120b-derestricted-gguf-117b-latest:
-    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1 --repeat-last-n 64
+    chat_template_kwargs: '{"enable_thinking": false}'
+    sampler_args: --temp 1.2 --min-p 0.05 --repeat-penalty 1.1 --repeat-last-n 64
     ctx_size: 65536
     jinja: false
   gpt-oss-20b-derestricted-gguf-20.9b-q8_0:
@@ -22,7 +23,7 @@ models:
     ctx_size: 65536
     jinja: false
   gemma-3-27b-derestricted-gguf-27b-q8_0:
-    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
+    sampler_args: --temp 1.5 --min-p 0.05
     ctx_size: 32768
     chat_template_file: /Users/au/src/model_serve/templates/gemma3-relaxed.jinja
   gemma27b:
@@ -170,3 +171,12 @@ models:
     ollama_model: nomic-embed-text:latest
   mxbai-embed-large-334m-f16:
     ollama_model: mxbai-embed-large:latest
+
+  # LM Studio backend models
+  # Routes to LM Studio instead of llama-swap
+  # Note: --top-nsigma is NOT supported by LM Studio
+  devstral-lmstudio:
+    backend: lm_studio
+    lm_studio_model: devstral-small-2@q4_k_m
+    sampler_args: --temp 0.4 --min-p 0.05 --top-p 0.95
+    ctx_size: 32768
