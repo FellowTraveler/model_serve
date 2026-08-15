@@ -223,6 +223,10 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
                 if 'chat_template_file' in custom:
                     model_config['cmd'] = f"{model_config['cmd']} --chat-template-file {custom['chat_template_file']}"
 
+                # Allow multimodal projector (enables vision for models with a separate mmproj GGUF)
+                if 'mmproj' in custom:
+                    model_config['cmd'] = f"{model_config['cmd']} --mmproj {custom['mmproj']}"
+
                 # Allow chat template kwargs (for thinking model control)
                 if 'chat_template_kwargs' in custom:
                     model_config['cmd'] = f"{model_config['cmd']} --chat-template-kwargs '{custom['chat_template_kwargs']}'"
@@ -275,6 +279,10 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
             # Allow custom chat template (for models that need relaxed role alternation)
             if 'chat_template_file' in custom:
                 cmd = f"{cmd} --chat-template-file {custom['chat_template_file']}"
+
+            # Allow multimodal projector (enables vision for models with a separate mmproj GGUF)
+            if 'mmproj' in custom:
+                cmd = f"{cmd} --mmproj {custom['mmproj']}"
 
             # Allow chat template kwargs (for thinking model control)
             if 'chat_template_kwargs' in custom:

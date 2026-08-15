@@ -32,3 +32,6 @@ request_logs/*
 
 # Local scratch notes
 scratch.md
+
+# Vision projector binaries (re-download per mmproj/README.md)
+mmproj/*.gguf
