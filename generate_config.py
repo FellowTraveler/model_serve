@@ -200,6 +200,10 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
             # Skip if entry has no value (just model name with nothing after)
             if custom is None:
                 pass
+            # Skip llama-swap entry for models routed to another backend
+            elif custom.get('backend') in ('ollama', 'lm_studio'):
+                model_paths[model_id] = (symlink_path, resolved_path)
+                continue
             else:
                 # Handle jinja flag (server flag, not sampler)
                 # llama-server defaults to --jinja enabled, so we need --no-jinja to disable
