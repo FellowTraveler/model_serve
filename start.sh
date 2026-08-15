@@ -63,12 +63,30 @@ check_deps() {
     fi
 }
 
+# Find a python3 that has the required dependencies installed
+# (same candidate order as the ./model script; override with PYTHON_BIN in .env)
+find_python_with_deps() {
+    local candidates=("${PYTHON_BIN:-}" /opt/miniconda3/bin/python3 /opt/homebrew/bin/python3 /usr/local/bin/python3 python3)
+    for p in "${candidates[@]}"; do
+        [ -n "$p" ] || continue
+        if command -v "$p" &> /dev/null && "$p" -c "import requests, psutil, fastapi, uvicorn, openai_harmony" 2>/dev/null; then
+            echo "$p"
+            return
+        fi
+    done
+    echo ""
+}
+
 # Check Python dependencies
 check_python_deps() {
-    python3 -c "import requests, psutil, fastapi, uvicorn, openai_harmony" 2>/dev/null || {
-        echo "Installing Python dependencies..."
-        pip3 install -r requirements.txt
-    }
+    PYTHON_BIN=$(find_python_with_deps)
+    if [ -z "$PYTHON_BIN" ]; then
+        echo "Error: No python3 found with required dependencies."
+        echo "Install them into your python (e.g. miniconda):"
+        echo "  /opt/miniconda3/bin/pip install -r requirements.txt"
+        exit 1
+    fi
+    echo "Using python: $PYTHON_BIN"
 }
 
 start_llama_swap() {
@@ -81,7 +99,7 @@ start_llama_swap() {
 
 start_pressure_unloader() {
     echo "Starting pressure unloader..."
-    python3 pressure_unloader.py &
+    "$PYTHON_BIN" pressure_unloader.py &
     UNLOADER_PID=$!
     echo "Pressure unloader PID: $UNLOADER_PID"
 }
@@ -96,7 +114,7 @@ start_sync_loop() {
 start_harmony_proxy() {
     echo "Starting Harmony proxy on port ${HARMONY_PROXY_PORT}..."
     LLAMA_SWAP_BASE="http://127.0.0.1:${LLAMA_SWAP_PORT}" \
-        python3 -m uvicorn harmony_proxy:app --host 0.0.0.0 --port "${HARMONY_PROXY_PORT}" &
+        "$PYTHON_BIN" -m uvicorn harmony_proxy:app --host 0.0.0.0 --port "${HARMONY_PROXY_PORT}" &
     HARMONY_PROXY_PID=$!
     echo "Harmony proxy PID: $HARMONY_PROXY_PID"
 }
