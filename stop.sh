@@ -15,6 +15,9 @@ pkill -f "pressure_unloader.py" 2>/dev/null && echo "Stopped pressure unloader" 
 # Kill sync loop
 pkill -f "sync_loop.sh" 2>/dev/null && echo "Stopped sync loop" || echo "Sync loop not running"
 
+# Kill MLX server
+pkill -f "mlx_lm.server" 2>/dev/null && echo "Stopped MLX server" || echo "MLX server not running"
+
 # Kill any orphaned llama-server instances
 pkill -f "llama-server" 2>/dev/null && echo "Stopped llama-server instances" || echo "No llama-server instances running"
 

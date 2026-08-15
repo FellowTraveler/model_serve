@@ -111,6 +111,32 @@ start_sync_loop() {
     echo "Sync loop PID: $SYNC_PID"
 }
 
+start_mlx_server() {
+    MLX_SERVER_PORT="${MLX_SERVER_PORT:-5848}"
+
+    # Find mlx_lm.server (env override, PATH, or uv tool install location)
+    local mlx_bin="${MLX_SERVER_BIN:-}"
+    if [ -z "$mlx_bin" ]; then
+        if command -v mlx_lm.server &> /dev/null; then
+            mlx_bin="mlx_lm.server"
+        elif [ -x "$HOME/.local/bin/mlx_lm.server" ]; then
+            mlx_bin="$HOME/.local/bin/mlx_lm.server"
+        fi
+    fi
+
+    if [ -z "$mlx_bin" ]; then
+        echo "mlx_lm.server not found, skipping MLX backend (install: uv tool install mlx-lm)"
+        return
+    fi
+
+    echo "Starting MLX server on port ${MLX_SERVER_PORT}..."
+    # MLX_SERVER_ARGS is expanded unquoted on purpose (extra args from .env,
+    # e.g. --chat-template-args {"reasoning_effort":"medium"} - no spaces inside values)
+    "$mlx_bin" --host 127.0.0.1 --port "${MLX_SERVER_PORT}" ${MLX_SERVER_ARGS} &
+    MLX_PID=$!
+    echo "MLX server PID: $MLX_PID"
+}
+
 start_harmony_proxy() {
     echo "Starting Harmony proxy on port ${HARMONY_PROXY_PORT}..."
     LLAMA_SWAP_BASE="http://127.0.0.1:${LLAMA_SWAP_PORT}" \
@@ -137,6 +163,10 @@ cleanup() {
 
     if [ -n "$SYNC_PID" ]; then
         kill $SYNC_PID 2>/dev/null || true
+    fi
+
+    if [ -n "$MLX_PID" ]; then
+        kill $MLX_PID 2>/dev/null || true
     fi
 
     # Kill any child processes
@@ -174,6 +204,7 @@ for i in {1..30}; do
 done
 
 start_harmony_proxy
+start_mlx_server
 start_pressure_unloader
 start_sync_loop
 

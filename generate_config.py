@@ -201,7 +201,7 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
             if custom is None:
                 pass
             # Skip llama-swap entry for models routed to another backend
-            elif custom.get('backend') in ('ollama', 'lm_studio'):
+            elif custom.get('backend') in ('ollama', 'lm_studio', 'mlx'):
                 model_paths[model_id] = (symlink_path, resolved_path)
                 continue
             else:

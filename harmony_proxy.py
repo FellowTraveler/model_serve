@@ -53,6 +53,9 @@ OLLAMA_BASE = os.environ.get("OLLAMA_BASE", "http://localhost:11434")
 # LM Studio backend for models with backend: lm_studio
 LM_STUDIO_BASE = os.environ.get("LM_STUDIO_BASE", "http://127.0.0.1:1234")
 
+# MLX backend (mlx_lm.server) for models with backend: mlx
+MLX_BASE = os.environ.get("MLX_BASE", "http://127.0.0.1:5848")
+
 # Model name prefix (ms/ = model_serve)
 MODEL_PREFIX = os.environ.get("MODEL_PREFIX", "ms/")
 
@@ -69,6 +72,20 @@ async def check_lm_studio_available() -> bool:
     try:
         async with httpx.AsyncClient(timeout=2) as client:
             resp = await client.get(f"{LM_STUDIO_BASE}/v1/models")
+            return resp.status_code == 200
+    except Exception:
+        return False
+
+
+async def check_mlx_available() -> bool:
+    """
+    Check if the MLX server (mlx_lm.server) is running and accessible.
+
+    Returns True if the MLX server is available, False otherwise.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=2) as client:
+            resp = await client.get(f"{MLX_BASE}/v1/models")
             return resp.status_code == 200
     except Exception:
         return False
@@ -223,7 +240,7 @@ def get_model_backend(model: str) -> str:
     """
     Get configured backend for a model.
 
-    Returns: "llama_swap" (default), "ollama", or "lm_studio"
+    Returns: "llama_swap" (default), "ollama", "lm_studio", or "mlx"
 
     Backend is determined by:
     1. Explicit "backend" field in custom_models.yaml
@@ -285,6 +302,24 @@ def get_lm_studio_model_name(model: str) -> str:
             return lm_studio_name
 
     # No mapping found, return base name (LM Studio uses different naming)
+    return base_name
+
+
+def get_mlx_model_name(model: str) -> str:
+    """
+    Translate model name to the MLX model name (HF repo or local path) if mapping exists.
+
+    Handles both prefixed (ms/model-name) and unprefixed (model-name) formats.
+    """
+    base_name = model[len(MODEL_PREFIX):] if model.startswith(MODEL_PREFIX) else model
+
+    if base_name in CUSTOM_MODELS:
+        mlx_name = CUSTOM_MODELS[base_name].get("mlx_model")
+        if mlx_name:
+            logger.info(f"Mapped {model} -> {mlx_name} for MLX")
+            return mlx_name
+
+    # No mapping found, return base name
     return base_name
 
 
@@ -881,12 +916,17 @@ async def health_check():
     except Exception:
         lm_studio_status = "not_running"
 
+    # Check if the MLX server is available
+    mlx_status = "running" if await check_mlx_available() else "not_running"
+
     return {
         "status": "healthy",
         "harmony_models": list(HARMONY_MODELS),
         "llama_swap_base": LLAMA_SWAP_BASE,
         "lm_studio_base": LM_STUDIO_BASE,
         "lm_studio_status": lm_studio_status,
+        "mlx_base": MLX_BASE,
+        "mlx_status": mlx_status,
     }
 
 
@@ -1532,6 +1572,27 @@ async def chat_completions(request: Request):
 
         logger.info(f"LM Studio passthrough sampler_opts: {sampler_opts}")
         return await proxy_to_backend(LM_STUDIO_BASE, "/v1/chat/completions", lm_body, stream)
+
+    # MLX backend (mlx_lm.server) - OpenAI-compatible passthrough
+    if backend == "mlx":
+        if not await check_mlx_available():
+            return JSONResponse(
+                content={"error": {"message": f"MLX server is not running at {MLX_BASE}. Start the stack with ./model start (requires mlx-lm: uv tool install mlx-lm).", "type": "server_error"}},
+                status_code=503,
+            )
+        sampler_opts = get_model_sampler_options(model)
+        mlx_body = {**body, "model": get_mlx_model_name(model)}
+
+        # Apply sampler options from config (only if not already in request body)
+        # mlx_lm.server uses OpenAI names, except repeat_penalty -> repetition_penalty
+        for key in ("temperature", "top_p", "top_k", "min_p"):
+            if key in sampler_opts and key not in body:
+                mlx_body[key] = sampler_opts[key]
+        if "repeat_penalty" in sampler_opts and "repetition_penalty" not in body:
+            mlx_body["repetition_penalty"] = sampler_opts["repeat_penalty"]
+
+        logger.info(f"MLX passthrough sampler_opts: {sampler_opts}")
+        return await proxy_to_backend(MLX_BASE, "/v1/chat/completions", mlx_body, stream)
 
     # Ollama backend - use native /api/chat (supports think:false and num_ctx)
     if backend == "ollama":

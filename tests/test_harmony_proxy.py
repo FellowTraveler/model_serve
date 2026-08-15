@@ -9,6 +9,7 @@ from harmony_proxy import (
     is_embedding_model,
     get_ollama_model_name,
     get_lm_studio_model_name,
+    get_mlx_model_name,
     get_model_backend,
     get_model_ctx_size,
     get_model_sampler_options,
@@ -121,6 +122,25 @@ class TestModelRouting:
         # mxbai-embed-large mapping
         mapped = get_ollama_model_name("ms/mxbai-embed-large-334m-f16")
         assert mapped == "mxbai-embed-large:latest"
+
+
+class TestMLXBackend:
+    """Test MLX backend routing."""
+
+    def test_get_model_backend_mlx(self):
+        """Models with backend: mlx should route to the MLX server."""
+        backend = get_model_backend("ms/qwen3.8-27b-mlx-8bit")
+        assert backend == "mlx"
+
+    def test_mlx_model_name_mapping(self):
+        """Models with mlx_model mapping should return the HF repo name."""
+        name = get_mlx_model_name("ms/qwen3.8-27b-mlx-8bit")
+        assert name == "mlx-community/Qwen3.8-27B-8bit"
+
+    def test_mlx_model_name_no_mapping(self):
+        """Models without mlx_model mapping should return base name."""
+        name = get_mlx_model_name("ms/gemma3-12.2b-q8_0")
+        assert name == "gemma3-12.2b-q8_0"
 
 
 class TestLMStudioBackend:
