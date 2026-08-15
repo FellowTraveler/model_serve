@@ -11,21 +11,27 @@ Usage:
     ./model stats                  Show loaded models with resource usage
     ./model pull <model-name>      Pull a model and sync
     ./model rm <model-name>        Remove a model and sync
+    ./model rm --filter <term>     Bulk-remove all models matching term (with confirmation)
     ./model list [filter]          List Ollama models (optional filter)
     ./model list --config [filter] List llama-swap model names from config
     ./model names [filter]         Show Ollama → llama-swap name mapping
     ./model show <filter>          Show full config for matching models
     ./model sync                   Just sync and regenerate config
     ./model run <model-name>       Run a model interactively (passthrough to ollama)
+    ./model update                 Update all Ollama models, report modelfile changes
+    ./model update <model-name>    Update a single model, report modelfile changes
 
 Examples:
     ./model start                  # Start server, logs to model_serve.log
     ./model stats                  # See what's loaded and memory usage
     ./model pull gemma3:27b        # Pull and auto-sync
+    ./model rm --filter gemma3     # Remove all gemma3 variants (with confirmation)
     ./model list derestricted      # Filter Ollama models by name
     ./model list --config gemma    # Show llama-swap names matching 'gemma'
     ./model names qwen             # Show name mapping for qwen models
     ./model show gemma3:12         # Show full config for matching models
+    ./model update                 # Re-pull all models, save update_report.md if anything changed
+    ./model update qwen3:8b-q8_0   # Re-pull one model and report changes
 """
 
 import os
@@ -67,6 +73,29 @@ def ollama_rm(model_name: str) -> bool:
     print(f"\n=== Removing {model_name} via Ollama ===\n")
     result = run_cmd(['ollama', 'rm', model_name], check=False)
     return result.returncode == 0
+
+
+def ollama_list_names(filter_term: str = None) -> list[str]:
+    """Return list of Ollama model names, optionally filtered."""
+    result = subprocess.run(
+        ['ollama', 'list'],
+        capture_output=True,
+        text=True,
+        check=False
+    )
+    if result.returncode != 0:
+        return []
+
+    lines = result.stdout.strip().split('\n')
+    names = []
+    filter_lower = filter_term.lower() if filter_term else None
+    for line in lines[1:]:  # skip header
+        if not line.strip():
+            continue
+        name = line.split()[0]
+        if filter_lower is None or filter_lower in name.lower():
+            names.append(name)
+    return names
 
 
 def ollama_list(filter_term: str = None) -> bool:
@@ -442,11 +471,42 @@ def cmd_rm(args: list[str]):
     """Handle rm command."""
     if not args:
         print("Usage: model rm <model-name>")
+        print("       model rm --filter <term>")
         print("Example: model rm gemma3:12b")
+        print("Example: model rm --filter gemma3")
         sys.exit(1)
 
-    model_name = args[0]
+    # Bulk remove by filter
+    if args[0] == '--filter':
+        if len(args) < 2:
+            print("Usage: model rm --filter <term>")
+            sys.exit(1)
+        filter_term = args[1]
+        names = ollama_list_names(filter_term)
+        if not names:
+            print(f"No models matching '{filter_term}'")
+            return
+        print(f"Models matching '{filter_term}':")
+        for name in names:
+            print(f"  {name}")
+        print(f"\n{len(names)} model(s) will be removed.")
+        confirm = input("Confirm? [y/N] ").strip().lower()
+        if confirm != 'y':
+            print("Aborted.")
+            return
+        failed = []
+        for name in names:
+            if not ollama_rm(name):
+                failed.append(name)
+        if failed:
+            print(f"\nFailed to remove: {', '.join(failed)}")
+        do_sync()
+        removed = len(names) - len(failed)
+        print(f"\n=== Done! {removed} model(s) removed, symlinks cleaned up ===")
+        return
 
+    # Single model remove
+    model_name = args[0]
     if not ollama_rm(model_name):
         print(f"\nFailed to remove {model_name}")
         sys.exit(1)
@@ -680,6 +740,146 @@ def cmd_show(args: list[str]):
     print(f"\n({len(matches)} model(s) matching '{args[0]}')")
 
 
+def get_modelfile(model_name: str) -> str:
+    """Return raw modelfile text for a model, or empty string on failure."""
+    result = subprocess.run(
+        ['ollama', 'show', '--modelfile', model_name],
+        capture_output=True, text=True, check=False, timeout=10
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def parse_modelfile(text: str) -> dict:
+    """Extract blob hash, PARAMETER values, template, and system from a modelfile."""
+    info = {'blob': '', 'parameters': {}, 'template': '', 'system': ''}
+    if not text:
+        return info
+
+    lines = text.split('\n')
+    i = 0
+    while i < len(lines):
+        upper = lines[i].strip().upper()
+
+        if upper.startswith('FROM '):
+            val = lines[i].strip()[5:].strip()
+            info['blob'] = val.split('sha256-')[-1][:16] if 'sha256-' in val else val
+
+        elif upper.startswith('PARAMETER '):
+            parts = lines[i].strip()[10:].split(None, 1)
+            if len(parts) == 2:
+                info['parameters'][parts[0].lower()] = parts[1]
+
+        elif upper.startswith('TEMPLATE ') or upper == 'TEMPLATE':
+            rest = lines[i].strip()[8:].strip().lstrip('"""').lstrip('"')
+            buf = [rest]
+            if '"""' not in lines[i][lines[i].find('TEMPLATE') + 8:].lstrip() or rest == '':
+                i += 1
+                while i < len(lines) and '"""' not in lines[i]:
+                    buf.append(lines[i])
+                    i += 1
+            info['template'] = '\n'.join(buf).strip()
+
+        elif upper.startswith('SYSTEM ') or upper == 'SYSTEM':
+            rest = lines[i].strip()[6:].strip().lstrip('"""').lstrip('"')
+            buf = [rest]
+            if '"""' not in lines[i][lines[i].find('SYSTEM') + 6:].lstrip() or rest == '':
+                i += 1
+                while i < len(lines) and '"""' not in lines[i]:
+                    buf.append(lines[i])
+                    i += 1
+            info['system'] = '\n'.join(buf).strip()
+
+        i += 1
+
+    return info
+
+
+def diff_modelfiles(before: str, after: str) -> dict:
+    """Return a structured diff of two modelfiles."""
+    b = parse_modelfile(before)
+    a = parse_modelfile(after)
+
+    changed_params = {}
+    all_keys = set(b['parameters']) | set(a['parameters'])
+    for key in all_keys:
+        bval = b['parameters'].get(key, '<removed>')
+        aval = a['parameters'].get(key, '<added>')
+        if bval != aval:
+            changed_params[key] = (bval, aval)
+
+    return {
+        'anything_changed': before != after,
+        'weights_changed': b['blob'] != a['blob'],
+        'blob_before': b['blob'],
+        'blob_after': a['blob'],
+        'params_changed': changed_params,
+        'template_changed': b['template'] != a['template'],
+        'system_changed': b['system'] != a['system'],
+    }
+
+
+def cmd_update(args: list[str]):
+    """Update one or all models and report modelfile changes."""
+    if args and args[0] != '--all':
+        model_names = [args[0]]
+    else:
+        model_names = ollama_list_names()
+
+    if not model_names:
+        print("No models found.")
+        return
+
+    print(f"\n=== Updating {len(model_names)} model(s) ===")
+
+    changes = []
+    for model_name in model_names:
+        before = get_modelfile(model_name)
+        if not ollama_pull(model_name):
+            print(f"Warning: pull failed for {model_name}")
+            continue
+        after = get_modelfile(model_name)
+        diff = diff_modelfiles(before, after)
+        if diff['anything_changed']:
+            changes.append((model_name, diff))
+
+    do_sync()
+
+    if not changes:
+        print("\n=== All models up to date, no changes detected ===")
+        return
+
+    # Build markdown report
+    lines = [
+        "# Model Update Report",
+        "",
+        f"{len(changes)} model(s) changed:",
+        "",
+    ]
+    for model_name, diff in changes:
+        lines.append(f"## `{model_name}`")
+        lines.append("")
+        if diff['weights_changed']:
+            lines.append(f"- **Weights updated** — blob `{diff['blob_before'][:8]}` → `{diff['blob_after'][:8]}`")
+        if diff['template_changed']:
+            lines.append("- **Chat template changed** — review `jinja`/`chat_template_file` in `custom_models.yaml`")
+        if diff['system_changed']:
+            lines.append("- **System prompt changed**")
+        if diff['params_changed']:
+            lines.append("- **Default parameters changed:**")
+            for param, (old, new) in diff['params_changed'].items():
+                lines.append(f"  - `{param}`: `{old}` → `{new}`")
+                if param in ('num_ctx', 'temperature', 'top_p', 'top_k', 'min_p', 'repeat_penalty'):
+                    lines.append(f"    ⚠️  Check `ctx_size`/`sampler_args` in `custom_models.yaml`")
+        lines.append("")
+
+    report = '\n'.join(lines)
+    report_path = SCRIPT_DIR / 'update_report.md'
+    report_path.write_text(report)
+
+    print("\n" + report)
+    print(f"=== Report saved to {report_path} ===")
+
+
 def cmd_sync(args: list[str]):
     """Handle sync command."""
     do_sync()
@@ -833,6 +1033,7 @@ def main():
         'ls': cmd_list,
         'names': cmd_names,
         'show': cmd_show,
+        'update': cmd_update,
         'sync': cmd_sync,
         'run': cmd_run,
         'stats': cmd_stats,
