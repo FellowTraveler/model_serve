@@ -35,3 +35,6 @@ scratch.md
 
 # Vision projector binaries (re-download per mmproj/README.md)
 mmproj/*.gguf
+
+# A/B eval raw outputs
+eval_results/
