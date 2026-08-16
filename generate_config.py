@@ -17,7 +17,7 @@ from pathlib import Path
 
 def get_config():
     """Load configuration from environment or defaults."""
-    models_dir = os.environ.get('MODELS_DIR', '~/.lmstudio/models')
+    models_dir = os.environ.get('MODELS_DIR', '~/.cache/lm-studio/models')
     return {
         'models_dir': os.path.expanduser(models_dir),
         'llama_swap_port': os.environ.get('LLAMA_SWAP_PORT', '5847'),
