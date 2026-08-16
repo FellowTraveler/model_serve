@@ -159,7 +159,12 @@ def sync_bridge() -> bool:
         print("Run ./install.sh to build it")
         return False
 
-    result = run_cmd([bridge_script], check=False)
+    # Pass the destination explicitly so the bridge follows MODELS_DIR.
+    # Without it, the bridge uses its own ~/.config/ollama-sync/config.yaml,
+    # whose default is the pre-2026 LM Studio dir (~/.cache/lm-studio/models).
+    models_dir = os.path.expanduser(os.environ.get('MODELS_DIR', '~/.lmstudio/models'))
+    destination = os.path.join(models_dir, 'ollama')
+    result = run_cmd([bridge_script, '--destinations', destination], check=False)
     return result.returncode == 0
 
 
@@ -267,7 +272,7 @@ def reload_llama_swap() -> bool:
 
 def cleanup_broken_symlinks() -> int:
     """Remove broken symlinks from LM Studio models directory."""
-    models_dir = os.environ.get('MODELS_DIR', '~/.cache/lm-studio/models')
+    models_dir = os.environ.get('MODELS_DIR', '~/.lmstudio/models')
     models_dir = os.path.expanduser(models_dir)
 
     if not os.path.exists(models_dir):
