@@ -14,4 +14,11 @@ curl -sL -o mmproj/Qwen3.8-27B-mmproj-F16.gguf \
 # Qwen3.8-27B-heretic-ara (mradermacher/Qwen3.8-27B-heretic-ara-GGUF)
 curl -sL -o mmproj/Qwen3.8-27B-heretic-ara-mmproj-F16.gguf \
   "https://huggingface.co/mradermacher/Qwen3.8-27B-heretic-ara-GGUF/resolve/main/Qwen3.8-27B-heretic-ara.mmproj-f16.gguf"
+
+# Muse Glimmer 30B heretic / heretic-plus (Q8_0 mmproj: the ViT-G/14 encoder is
+# 1.8B params, frozen in both variants; F16 would be 3.7GB for negligible gain)
+curl -sL -o mmproj/Muse-Glimmer-30B-heretic-mmproj-Q8_0.gguf \
+  "https://huggingface.co/mradermacher/Muse-Glimmer-30B-heretic-GGUF/resolve/main/Muse-Glimmer-30B-heretic.mmproj-Q8_0.gguf"
+curl -sL -o mmproj/Muse-Glimmer-30B-heretic-plus-mmproj-Q8_0.gguf \
+  "https://huggingface.co/mradermacher/Muse-Glimmer-30B-heretic-plus-GGUF/resolve/main/Muse-Glimmer-30B-heretic-plus.mmproj-Q8_0.gguf"
 ```
