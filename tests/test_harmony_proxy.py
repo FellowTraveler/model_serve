@@ -57,14 +57,14 @@ class TestModelRouting:
         assert not is_mxfp4_model("qwen3-0.6b")
 
     def test_ollama_model_name_mapping(self):
-        """MXFP4 model names should be translated to Ollama names."""
+        """Configured model names should be translated to Ollama names."""
         # With ms/ prefix
-        mapped = get_ollama_model_name("ms/gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
-        assert mapped == "hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest"
+        mapped = get_ollama_model_name("ms/qwable-v1-gguf-34.7b-q8_0")
+        assert mapped == "hf.co/lordx64/Qwable-v1-GGUF:Q8_0"
 
         # Without ms/ prefix
-        mapped = get_ollama_model_name("gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
-        assert mapped == "hf.co/Felladrin/gguf-MXFP4-gpt-oss-20b-Derestricted:latest"
+        mapped = get_ollama_model_name("qwable-v1-gguf-34.7b-q8_0")
+        assert mapped == "hf.co/lordx64/Qwable-v1-GGUF:Q8_0"
 
         # Unknown model returns original
         mapped = get_ollama_model_name("ms/some-unknown-model")
@@ -72,12 +72,12 @@ class TestModelRouting:
 
     def test_model_ctx_size_from_config(self):
         """Context size should be read from custom_models.yaml."""
-        # MXFP4 GPT-OSS 20B has ctx_size: 65536 in config
-        ctx = get_model_ctx_size("ms/gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
+        # GPT-OSS 20B (unsloth) has ctx_size: 65536 in config
+        ctx = get_model_ctx_size("ms/gpt-oss-20b-gguf-20.9b-q8_k_xl")
         assert ctx == 65536
 
         # Without prefix
-        ctx = get_model_ctx_size("gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
+        ctx = get_model_ctx_size("gpt-oss-20b-gguf-20.9b-q8_k_xl")
         assert ctx == 65536
 
     def test_model_ctx_size_default(self):
@@ -87,8 +87,8 @@ class TestModelRouting:
 
     def test_sampler_options_from_config(self):
         """Sampler args should be parsed from custom_models.yaml."""
-        # GPT-OSS 20B has all sampler args explicitly configured
-        opts = get_model_sampler_options("ms/gguf-mxfp4-gpt-oss-20b-derestricted-20.9b-latest")
+        # GPT-OSS 20B (unsloth) has all sampler args explicitly configured
+        opts = get_model_sampler_options("ms/gpt-oss-20b-gguf-20.9b-q8_k_xl")
         assert opts.get("temperature") == 0.7
         assert opts.get("top_p") == 0.95
         assert opts.get("top_k") == 40
@@ -122,6 +122,37 @@ class TestModelRouting:
         # mxbai-embed-large mapping
         mapped = get_ollama_model_name("ms/mxbai-embed-large-334m-f16")
         assert mapped == "mxbai-embed-large:latest"
+
+
+class TestBackendResponseHandling:
+    """Test that non-JSON backend replies become error JSON, not proxy crashes."""
+
+    class _FakeResponse:
+        def __init__(self, text, status_code):
+            self.text = text
+            self.status_code = status_code
+
+        def json(self):
+            import json as jsonlib
+            return jsonlib.loads(self.text)
+
+    def test_non_json_backend_body_wrapped_as_error(self):
+        """Plain-text backend errors (e.g. llama-swap mid-reload) must not raise."""
+        from harmony_proxy import json_response_from_backend
+        resp = json_response_from_backend(self._FakeResponse("upstream reloading", 200))
+        assert resp.status_code == 502  # non-error upstream code upgraded to 502
+        assert b"non-JSON" in resp.body
+
+    def test_non_json_error_status_preserved(self):
+        from harmony_proxy import json_response_from_backend
+        resp = json_response_from_backend(self._FakeResponse("bad gateway", 503))
+        assert resp.status_code == 503
+
+    def test_valid_json_passthrough(self):
+        from harmony_proxy import json_response_from_backend
+        resp = json_response_from_backend(self._FakeResponse('{"ok": true}', 200))
+        assert resp.status_code == 200
+        assert b'"ok"' in resp.body
 
 
 class TestMLXBackend:

@@ -958,7 +958,26 @@ async def proxy_to_backend(base_url: str, path: str, body: dict, stream: bool):
     else:
         async with httpx.AsyncClient(timeout=None) as client:
             resp = await client.post(url, json=body, timeout=None)
-            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+            return json_response_from_backend(resp)
+
+
+def json_response_from_backend(resp) -> JSONResponse:
+    """
+    Build a JSONResponse from a backend reply, tolerating non-JSON bodies.
+
+    Backends can return plain-text errors (e.g. llama-swap mid-reload); parsing
+    those with resp.json() used to crash the proxy with a 500. Wrap them in an
+    OpenAI-style error object instead, preserving the backend's status code.
+    """
+    try:
+        return JSONResponse(content=resp.json(), status_code=resp.status_code)
+    except (json.JSONDecodeError, ValueError):
+        detail = resp.text[:500] if resp.text else "empty response from backend"
+        status = resp.status_code if resp.status_code >= 400 else 502
+        return JSONResponse(
+            content={"error": {"message": f"Backend returned non-JSON response: {detail}", "type": "server_error"}},
+            status_code=status,
+        )
 
 
 async def proxy_openai_endpoint(path: str, body: dict, stream: bool):
@@ -1632,7 +1651,7 @@ async def embeddings(request: Request):
         async with httpx.AsyncClient(timeout=60) as client:
             try:
                 resp = await client.post(f"{OLLAMA_BASE}/v1/embeddings", json=ollama_body)
-                return JSONResponse(content=resp.json(), status_code=resp.status_code)
+                return json_response_from_backend(resp)
             except Exception as e:
                 logger.error(f"Ollama embeddings request failed: {e}")
                 return JSONResponse(
@@ -1649,7 +1668,7 @@ async def list_models():
     """List available models - passthrough to llama-swap."""
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(f"{LLAMA_SWAP_BASE}/v1/models")
-        return JSONResponse(content=resp.json(), status_code=resp.status_code)
+        return json_response_from_backend(resp)
 
 
 # ============================================================================
@@ -1684,4 +1703,4 @@ async def anthropic_messages(request: Request):
             return StreamingResponse(iter_stream(), media_type="text/event-stream")
         else:
             resp = await client.post(url, json=body, timeout=None)
-            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+            return json_response_from_backend(resp)
