@@ -138,14 +138,24 @@ class ABEvaluator:
 
     SPEED_PROMPT = "Write a vivid 300-word story about a lighthouse keeper who discovers a message in a bottle."
 
-    def __init__(self, models: list[str], refusal_n: int, out_dir: Path):
+    def __init__(self, models: list[str], refusal_n: int, out_dir: Path, refusal_max_tokens: int = 1024):
         self.models = models
         self.refusal_n = refusal_n
+        self.refusal_max_tokens = refusal_max_tokens
         self.out_dir = out_dir
         self.client = ProxyClient()
         self.scorer = RefusalScorer()
         self.capability = CapabilityProbes()
         self.results = {}
+
+    def run_refusals_only(self):
+        refusal_prompts = self.scorer.fetch_prompts(self.refusal_n)
+        for model in self.models:
+            print(f"\n=== Refusal-only eval: {model} ===")
+            log_path = self.out_dir / f"{model.replace('/', '_')}.jsonl"
+            with open(log_path, "w") as log:
+                self.results[model] = self._run_refusals(model, refusal_prompts, log)
+        print(f"\nRaw outputs: {self.out_dir}/")
 
     def run(self):
         refusal_prompts = self.scorer.fetch_prompts(self.refusal_n)
@@ -161,10 +171,13 @@ class ABEvaluator:
         self._print_summary()
 
     def _log(self, log, phase: str, prompt: str, response: dict):
+        message = response["choices"][0]["message"]
         entry = {
             "phase": phase,
             "prompt": prompt,
             "content": ProxyClient.content_of(response),
+            "reasoning_chars": len(message.get("reasoning_content") or ""),
+            "finish_reason": response["choices"][0].get("finish_reason"),
             "usage": response.get("usage"),
             "timings": response.get("timings"),
             "wall_seconds": response.get("_wall_seconds"),
@@ -205,9 +218,11 @@ class ABEvaluator:
         return {"passed": passed, "total": total, "details": details}
 
     def _run_refusals(self, model: str, prompts: list[str], log) -> dict:
+        # Generous max_tokens: reasoning models that get truncated mid-thinking
+        # produce empty content, which is unclassifiable rather than a refusal
         counts = {"refusal": 0, "comply": 0, "empty": 0}
         for i, prompt in enumerate(prompts):
-            response = self.client.chat(model, prompt, max_tokens=384)
+            response = self.client.chat(model, prompt, max_tokens=self.refusal_max_tokens)
             self._log(log, f"refusal-{i}", prompt, response)
             counts[self.scorer.classify(ProxyClient.content_of(response))] += 1
         print(f"  refusals: {counts['refusal']}/{len(prompts)} refused, "
@@ -235,12 +250,20 @@ def main():
     parser = argparse.ArgumentParser(description="A/B evaluate two proxy-served models")
     parser.add_argument("models", nargs="+", help="model names as served by the proxy (ms/...)")
     parser.add_argument("--refusal-n", type=int, default=30, help="number of refusal probes")
+    parser.add_argument("--refusal-max-tokens", type=int, default=1024,
+                        help="max_tokens for refusal probes (reasoning needs headroom)")
+    parser.add_argument("--refusals-only", action="store_true",
+                        help="skip speed and capability phases")
     args = parser.parse_args()
 
     out_dir = Path(__file__).resolve().parent.parent / "eval_results" / time.strftime("%Y%m%d_%H%M%S")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    ABEvaluator(args.models, args.refusal_n, out_dir).run()
+    evaluator = ABEvaluator(args.models, args.refusal_n, out_dir, args.refusal_max_tokens)
+    if args.refusals_only:
+        evaluator.run_refusals_only()
+    else:
+        evaluator.run()
 
 
 if __name__ == "__main__":
