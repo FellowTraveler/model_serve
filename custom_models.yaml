@@ -5,7 +5,14 @@ models:
     jinja: false
   # gpt-oss-20b SOMbliterated (mradermacher static Q8_0) - Harmony model, same
   # settings as the unsloth gpt-oss-20b entry above; registered in harmony_models.yaml
+  # Decensor: Heretic + SOM multi-directional (5 directions): refusals 3/100, KL 0.1166
   gpt-oss-20b-sombliterated-gguf-20.9b-q8_0:
+    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1 --repeat-last-n 64
+    ctx_size: 65536
+    jinja: false
+  # gpt-oss-20b heretic-ara-v3 (p-e-w via mradermacher Q8_0) - Harmony model
+  # Decensor: Heretic ARA (arbitrary-rank): refusals 3/100, KL 0.0554 (half of SOM's drift)
+  gpt-oss-20b-heretic-ara-v3-gguf-20.9b-q8_0:
     sampler_args: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1 --repeat-last-n 64
     ctx_size: 65536
     jinja: false
