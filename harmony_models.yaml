@@ -1,4 +1,3 @@
 harmony_models:
 - ms/gpt-oss-20b-gguf-20.9b-q8_k_xl
 - ms/gpt-oss-20b-sombliterated-gguf-20.9b-q8_0
-- ms/gpt-oss-20b-heretic-ara-v3-gguf-20.9b-q8_0

@@ -5,14 +5,12 @@ models:
     jinja: false
   # gpt-oss-20b SOMbliterated (mradermacher static Q8_0) - Harmony model, same
   # settings as the unsloth gpt-oss-20b entry above; registered in harmony_models.yaml
-  # Decensor: Heretic + SOM multi-directional (5 directions): refusals 3/100, KL 0.1166
+  # Decensor: Heretic + SOM multi-directional (5 directions): refusals 3/100, KL 0.1166.
+  # A/B tested vs p-e-w heretic-ara-v3 (tools/ab_eval.py, 2026-08-16): both 0/30
+  # refusals, 10/10 capability, ~67-69 tok/s - but ara-v3 burned the whole thinking
+  # budget on 11/30 probes (4 still unfinished at 2048 tok) vs 2/30 here, so the
+  # decisive SOM variant was kept and ara-v3 removed.
   gpt-oss-20b-sombliterated-gguf-20.9b-q8_0:
-    sampler_args: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1 --repeat-last-n 64
-    ctx_size: 65536
-    jinja: false
-  # gpt-oss-20b heretic-ara-v3 (p-e-w via mradermacher Q8_0) - Harmony model
-  # Decensor: Heretic ARA (arbitrary-rank): refusals 3/100, KL 0.0554 (half of SOM's drift)
-  gpt-oss-20b-heretic-ara-v3-gguf-20.9b-q8_0:
     sampler_args: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1 --repeat-last-n 64
     ctx_size: 65536
     jinja: false
