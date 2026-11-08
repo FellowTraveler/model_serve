@@ -24,6 +24,9 @@ fi
 
 LLAMA_SWAP_PORT="${LLAMA_SWAP_PORT:-5847}"
 HARMONY_PROXY_PORT="${HARMONY_PROXY_PORT:-5846}"
+# Interface the servers listen on. Loopback by default so the models are only
+# reachable from this machine; set BIND_HOST=0.0.0.0 in .env to expose them.
+BIND_HOST="${BIND_HOST:-127.0.0.1}"
 
 # Find llama-swap (prefer system install, fallback to local bin)
 find_llama_swap() {
@@ -92,7 +95,7 @@ check_python_deps() {
 start_llama_swap() {
     echo "Starting llama-swap on port ${LLAMA_SWAP_PORT}..."
     echo "Using: $LLAMA_SWAP_BIN"
-    "$LLAMA_SWAP_BIN" --config config.yaml --listen "0.0.0.0:${LLAMA_SWAP_PORT}" &
+    "$LLAMA_SWAP_BIN" --config config.yaml --listen "${BIND_HOST}:${LLAMA_SWAP_PORT}" &
     LLAMA_SWAP_PID=$!
     echo "llama-swap PID: $LLAMA_SWAP_PID"
 }
@@ -140,7 +143,7 @@ start_mlx_server() {
 start_harmony_proxy() {
     echo "Starting Harmony proxy on port ${HARMONY_PROXY_PORT}..."
     LLAMA_SWAP_BASE="http://127.0.0.1:${LLAMA_SWAP_PORT}" \
-        "$PYTHON_BIN" -m uvicorn harmony_proxy:app --host 0.0.0.0 --port "${HARMONY_PROXY_PORT}" &
+        "$PYTHON_BIN" -m uvicorn harmony_proxy:app --host "${BIND_HOST}" --port "${HARMONY_PROXY_PORT}" &
     HARMONY_PROXY_PID=$!
     echo "Harmony proxy PID: $HARMONY_PROXY_PID"
 }
