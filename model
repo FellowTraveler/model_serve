@@ -172,7 +172,7 @@ def find_python_with_yaml() -> str:
     """Find a Python interpreter that has PyYAML installed."""
     candidates = [
         os.environ.get('PYTHON_BIN', ''),  # Override from .env (same as start.sh)
-        '/opt/miniconda3/bin/python3',  # Conda
+        str(SCRIPT_DIR / 'venv' / 'bin' / 'python'),  # Project venv (install.sh)
         '/opt/homebrew/bin/python3',     # Homebrew Apple Silicon
         '/usr/local/bin/python3',        # Homebrew Intel / Linux
         'python3',                        # Whatever's in PATH

@@ -116,11 +116,13 @@ else
     echo "✓ llama-swap already installed at $(which llama-swap)"
 fi
 
-# Install Python dependencies
+# Install Python dependencies into the project venv (never into a shared interpreter)
 echo ""
-echo "Installing Python dependencies..."
-pip3 install -q -r requirements.txt
-echo "✓ Python dependencies installed"
+echo "Installing Python dependencies into venv/..."
+[ -x venv/bin/python ] || python3 -m venv venv
+venv/bin/python -m pip install -q --upgrade pip
+venv/bin/python -m pip install -q --upgrade -r requirements.txt
+echo "✓ Python dependencies installed in $SCRIPT_DIR/venv"
 
 # Copy .env.example to .env if it doesn't exist
 if [ ! -f .env ]; then
