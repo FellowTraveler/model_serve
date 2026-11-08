@@ -209,6 +209,7 @@ def reload_llama_swap() -> bool:
     import signal
 
     port = os.environ.get('LLAMA_SWAP_PORT', '5847')
+    bind_host = os.environ.get('BIND_HOST', '127.0.0.1')
 
     # Find llama-swap process
     try:
@@ -257,7 +258,7 @@ def reload_llama_swap() -> bool:
         # Restart llama-swap
         config_path = SCRIPT_DIR / 'config.yaml'
         subprocess.Popen(
-            [llama_swap_bin, '--config', str(config_path), '--listen', f'0.0.0.0:{port}'],
+            [llama_swap_bin, '--config', str(config_path), '--listen', f'{bind_host}:{port}'],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True

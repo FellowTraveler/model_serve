@@ -21,6 +21,7 @@ def get_config():
     return {
         'models_dir': os.path.expanduser(models_dir),
         'llama_swap_port': os.environ.get('LLAMA_SWAP_PORT', '5847'),
+        'bind_host': os.environ.get('BIND_HOST', '127.0.0.1'),  # Interface llama-swap listens on
         'model_ttl': int(os.environ.get('MODEL_TTL', '1800')),
         'default_ctx_size': int(os.environ.get('DEFAULT_CTX_SIZE', '8192')),
         'default_parallel': int(os.environ.get('DEFAULT_PARALLEL', '1')),  # Slots per model
@@ -158,7 +159,7 @@ def generate_config(models: list[tuple[str, str, str]], config: dict, custom_mod
     """Generate llama-swap configuration dictionary."""
 
     llama_swap_config = {
-        'listen': f"0.0.0.0:{config['llama_swap_port']}",
+        'listen': f"{config['bind_host']}:{config['llama_swap_port']}",
         'models': {}
     }
 
