@@ -69,7 +69,7 @@ check_deps() {
 # Find a python3 that has the required dependencies installed
 # (same candidate order as the ./model script; override with PYTHON_BIN in .env)
 find_python_with_deps() {
-    local candidates=("${PYTHON_BIN:-}" /opt/miniconda3/bin/python3 /opt/homebrew/bin/python3 /usr/local/bin/python3 python3)
+    local candidates=("${PYTHON_BIN:-}" "$SCRIPT_DIR/venv/bin/python" /opt/homebrew/bin/python3 /usr/local/bin/python3 python3)
     for p in "${candidates[@]}"; do
         [ -n "$p" ] || continue
         if command -v "$p" &> /dev/null && "$p" -c "import requests, psutil, fastapi, uvicorn, openai_harmony" 2>/dev/null; then
@@ -85,8 +85,7 @@ check_python_deps() {
     PYTHON_BIN=$(find_python_with_deps)
     if [ -z "$PYTHON_BIN" ]; then
         echo "Error: No python3 found with required dependencies."
-        echo "Install them into your python (e.g. miniconda):"
-        echo "  /opt/miniconda3/bin/pip install -r requirements.txt"
+        echo "Run ./install.sh to create the project venv with them, or set PYTHON_BIN in .env."
         exit 1
     fi
     echo "Using python: $PYTHON_BIN"
