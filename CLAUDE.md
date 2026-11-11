@@ -19,6 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./model pull <name>     # Pull via Ollama and auto-sync config
 ./model rm <name>       # Remove and auto-sync
 ./model list [filter]   # List Ollama models
+./model list --size     # List Ollama models, largest first (combines with a filter)
 ./model list --config   # List llama-swap model names (use these in API calls)
 ./model names [filter]  # Show Ollama → llama-swap name mapping (important: names differ)
 ./model show <filter>   # Show full generated config for matching models

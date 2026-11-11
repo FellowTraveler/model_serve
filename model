@@ -13,6 +13,7 @@ Usage:
     ./model rm <model-name>        Remove a model and sync
     ./model rm --filter <term>     Bulk-remove all models matching term (with confirmation)
     ./model list [filter]          List Ollama models (optional filter)
+    ./model list --size [filter]   List Ollama models, largest first
     ./model list --config [filter] List llama-swap model names from config
     ./model names [filter]         Show Ollama → llama-swap name mapping
     ./model show <filter>          Show full config for matching models
@@ -27,6 +28,7 @@ Examples:
     ./model pull gemma3:27b        # Pull and auto-sync
     ./model rm --filter gemma3     # Remove all gemma3 variants (with confirmation)
     ./model list derestricted      # Filter Ollama models by name
+    ./model list --size qwen       # Show qwen models, largest first
     ./model list --config gemma    # Show llama-swap names matching 'gemma'
     ./model names qwen             # Show name mapping for qwen models
     ./model show gemma3:12         # Show full config for matching models
@@ -35,6 +37,7 @@ Examples:
 """
 
 import os
+import re
 import sys
 import subprocess
 from pathlib import Path
@@ -98,10 +101,21 @@ def ollama_list_names(filter_term: str = None) -> list[str]:
     return names
 
 
-def ollama_list(filter_term: str = None) -> bool:
-    """List models in Ollama, optionally filtered."""
-    if filter_term:
-        # Get output and filter it
+OLLAMA_SIZE_UNITS = {'B': 1, 'KB': 1e3, 'MB': 1e6, 'GB': 1e9, 'TB': 1e12}
+
+
+def ollama_size_bytes(line: str) -> float:
+    """Size in bytes from an `ollama list` row's SIZE column (e.g. '6.6 GB'); -1 if absent."""
+    match = re.search(r'\s(\d+(?:\.\d+)?)\s(B|KB|MB|GB|TB)\s', f' {line} ')
+    if not match:
+        return -1
+    return float(match.group(1)) * OLLAMA_SIZE_UNITS[match.group(2)]
+
+
+def ollama_list(filter_term: str = None, sort_by_size: bool = False) -> bool:
+    """List models in Ollama, optionally filtered and/or sorted largest first."""
+    if filter_term or sort_by_size:
+        # Get output, then filter and/or sort it
         result = subprocess.run(
             ['ollama', 'list'],
             capture_output=True,
@@ -113,20 +127,21 @@ def ollama_list(filter_term: str = None) -> bool:
             return False
 
         lines = result.stdout.strip().split('\n')
-        filter_lower = filter_term.lower()
 
         # Print header
         if lines:
             print(lines[0])
 
-        # Filter and print matching lines
-        count = 0
-        for line in lines[1:]:
-            if filter_lower in line.lower():
-                print(line)
-                count += 1
+        rows = lines[1:]
+        if filter_term:
+            rows = [line for line in rows if filter_term.lower() in line.lower()]
+        if sort_by_size:
+            rows.sort(key=ollama_size_bytes, reverse=True)
+        for line in rows:
+            print(line)
 
-        print(f"\n({count} models matching '{filter_term}')")
+        if filter_term:
+            print(f"\n({len(rows)} models matching '{filter_term}')")
         return True
     else:
         result = subprocess.run(['ollama', 'list'], check=False)
@@ -542,8 +557,10 @@ def cmd_list(args: list[str]):
         cmd_list_config(filter_term)
         return
 
-    filter_term = args[0] if args else None
-    ollama_list(filter_term)
+    sort_by_size = '--size' in args
+    remaining = [arg for arg in args if arg != '--size']
+    filter_term = remaining[0] if remaining else None
+    ollama_list(filter_term, sort_by_size)
 
 
 def cmd_list_config(filter_term: str = None):
