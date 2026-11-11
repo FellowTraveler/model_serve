@@ -72,3 +72,24 @@ class TestLogLimitFromEnv:
     def test_env_override(self, monkeypatch):
         monkeypatch.setenv('MODEL_SERVE_LOG_MAX_MB', '5')
         assert model_cli.log_max_bytes() == 5 * 1024 * 1024
+
+
+class TestReloadLlamaSwapLogging:
+    def test_restarted_llama_swap_logs_to_log_file(self, tmp_path, monkeypatch):
+        """A llama-swap restarted by ./model sync must append to the log, not /dev/null."""
+        import time
+        from unittest.mock import patch
+
+        log = tmp_path / 'serve.log'
+        monkeypatch.setattr(model_cli, 'LOG_FILE', log)
+        pgrep = type('Result', (), {'returncode': 0, 'stdout': '12345\n'})()
+        with patch.object(model_cli.subprocess, 'run', return_value=pgrep), \
+             patch.object(model_cli.os, 'kill'), \
+             patch.object(time, 'sleep'), \
+             patch.object(model_cli.subprocess, 'Popen') as popen:
+            assert model_cli.reload_llama_swap() is True
+
+        stdout = popen.call_args.kwargs['stdout']
+        assert stdout.name == str(log)
+        assert 'a' in stdout.mode
+        assert popen.call_args.kwargs['stderr'] == model_cli.subprocess.STDOUT
