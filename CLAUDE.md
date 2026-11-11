@@ -27,11 +27,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Tests
 cd /Users/au/src/model_serve
-python -m pytest tests/ -v
-python -m pytest tests/test_harmony_proxy.py::test_name -v  # single test
+uv run pytest tests/ -v
+uv run pytest tests/test_harmony_proxy.py::test_name -v  # single test
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (exact versions + hashes from uv.lock, into .venv/)
+uv sync --locked
+
+# Add or upgrade a dependency (then commit pyproject.toml and uv.lock together)
+uv add <package>           # new dependency
+uv lock --upgrade          # upgrade everything within pyproject.toml bounds
+uvx pip-audit --path .venv/lib/python3.12/site-packages   # audit before committing
 ```
 
 ## Architecture
