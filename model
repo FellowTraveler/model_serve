@@ -44,6 +44,30 @@ from pathlib import Path
 
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
+LOG_FILE = SCRIPT_DIR / 'model_serve.log'
+DEFAULT_LOG_MAX_MB = 50
+
+
+def log_max_bytes() -> int:
+    """Log size limit from MODEL_SERVE_LOG_MAX_MB (0 disables trimming)."""
+    return int(os.environ.get('MODEL_SERVE_LOG_MAX_MB', DEFAULT_LOG_MAX_MB)) * 1024 * 1024
+
+
+def trim_log_file(log_path: Path, max_bytes: int):
+    """If the log exceeds max_bytes, keep only its newest half (from a line start).
+
+    Rewrites the file in place, so services appending to it keep writing to the same file.
+    """
+    if max_bytes <= 0 or not log_path.exists() or log_path.stat().st_size <= max_bytes:
+        return
+    keep_bytes = max_bytes // 2
+    with open(log_path, 'r+b') as f:
+        f.seek(-keep_bytes, os.SEEK_END)
+        newest = f.read()
+        newest = newest[newest.find(b'\n') + 1:]  # drop the partial first line
+        f.seek(0)
+        f.write(newest)
+        f.truncate()
 
 
 def load_env():
@@ -275,12 +299,14 @@ def reload_llama_swap() -> bool:
 
         # Restart llama-swap
         config_path = SCRIPT_DIR / 'config.yaml'
-        subprocess.Popen(
-            [llama_swap_bin, '--config', str(config_path), '--listen', f'{bind_host}:{port}'],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True
-        )
+        # Log to the stack's log file, like the llama-swap that start.sh launches
+        with open(LOG_FILE, 'a') as log:
+            subprocess.Popen(
+                [llama_swap_bin, '--config', str(config_path), '--listen', f'{bind_host}:{port}'],
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True
+            )
         print(f"Restarted llama-swap on port {port}")
         return True
 
@@ -1002,7 +1028,7 @@ def cmd_stats(args: list[str]):
 
 def cmd_start(args: list[str]):
     """Start the server stack in background."""
-    log_file = SCRIPT_DIR / 'model_serve.log'
+    log_file = LOG_FILE
 
     # Check if already running
     result = subprocess.run(['pgrep', '-f', 'llama-swap.*--config'], capture_output=True)
@@ -1047,6 +1073,7 @@ def cmd_help(args: list[str]):
 
 def main():
     load_env()
+    trim_log_file(LOG_FILE, log_max_bytes())
 
     commands = {
         'start': cmd_start,

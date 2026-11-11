@@ -90,21 +90,6 @@ models:
     chat_template_kwargs: '{"enable_thinking": false}'
     sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
     ctx_size: 32768
-  qwen3-next-79.7b-q4_k_m:
-    jinja: true
-    chat_template_kwargs: '{"enable_thinking": false}'
-    sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
-    ctx_size: 32768
-  qwen3-32.8b-q8_0:
-    jinja: true
-    chat_template_kwargs: '{"enable_thinking": false}'
-    sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
-    ctx_size: 32768
-  qwen3-32.8b-q4_k_m:
-    jinja: true
-    chat_template_kwargs: '{"enable_thinking": false}'
-    sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
-    ctx_size: 32768
   qwen3-14.8b-q8_0:
     jinja: true
     chat_template_kwargs: '{"enable_thinking": false}'
@@ -245,10 +230,6 @@ models:
     sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 1.2
     ctx_size: 65536
   llama3.2-1.2b-f16:
-    jinja: true
-    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 1.2
-    ctx_size: 65536
-  llama3.3-70.6b-q6_k:
     jinja: true
     sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 1.2
     ctx_size: 65536
