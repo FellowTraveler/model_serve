@@ -69,7 +69,7 @@ check_deps() {
 # Find a python3 that has the required dependencies installed
 # (same candidate order as the ./model script; override with PYTHON_BIN in .env)
 find_python_with_deps() {
-    local candidates=("${PYTHON_BIN:-}" "$SCRIPT_DIR/venv/bin/python" /opt/homebrew/bin/python3 /usr/local/bin/python3 python3)
+    local candidates=("${PYTHON_BIN:-}" "$SCRIPT_DIR/.venv/bin/python" /opt/homebrew/bin/python3 /usr/local/bin/python3 python3)
     for p in "${candidates[@]}"; do
         [ -n "$p" ] || continue
         if command -v "$p" &> /dev/null && "$p" -c "import requests, psutil, fastapi, uvicorn, openai_harmony" 2>/dev/null; then

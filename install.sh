@@ -116,13 +116,17 @@ else
     echo "✓ llama-swap already installed at $(which llama-swap)"
 fi
 
-# Install Python dependencies into the project venv (never into a shared interpreter)
+# Install Python dependencies into the project .venv (never into a shared interpreter).
+# uv installs exactly the versions pinned in uv.lock and verifies their hashes.
 echo ""
-echo "Installing Python dependencies into venv/..."
-[ -x venv/bin/python ] || python3 -m venv venv
-venv/bin/python -m pip install -q --upgrade pip
-venv/bin/python -m pip install -q --upgrade -r requirements.txt
-echo "✓ Python dependencies installed in $SCRIPT_DIR/venv"
+if ! command -v uv &> /dev/null; then
+    echo "Error: uv is required to install Python dependencies."
+    echo "Install it with: brew install uv   (or see https://docs.astral.sh/uv/)"
+    exit 1
+fi
+echo "Installing Python dependencies into .venv/ from uv.lock..."
+uv sync --locked
+echo "✓ Python dependencies installed in $SCRIPT_DIR/.venv"
 
 # Copy .env.example to .env if it doesn't exist
 if [ ! -f .env ]; then
