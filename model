@@ -46,6 +46,29 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent.resolve()
 LOG_FILE = SCRIPT_DIR / 'model_serve.log'
 DEFAULT_LOG_MAX_MB = 50
+REEXEC_MARKER = 'MODEL_SERVE_REEXECED'  # set while ./model restarts itself, to stop loops
+
+
+def project_python() -> str:
+    """The interpreter ./model should run under: PYTHON_BIN from .env, else the uv venv."""
+    default = str(SCRIPT_DIR / '.venv' / 'bin' / 'python')
+    return os.path.expanduser(os.environ.get('PYTHON_BIN') or default)
+
+
+def reexec_in_project_python():
+    """Restart ./model under the project's Python, so venv-only packages (psutil) import.
+
+    The shebang finds whatever python3 is first on PATH; the uv venv has the locked deps.
+    """
+    if os.environ.pop(REEXEC_MARKER, None):
+        return  # this is the restarted process; children start without the marker
+    target = project_python()
+    if not (os.path.isfile(target) and os.access(target, os.X_OK)):
+        return  # no venv yet (before ./install.sh): keep the current interpreter
+    if os.path.abspath(sys.executable) == os.path.abspath(target):
+        return
+    os.environ[REEXEC_MARKER] = '1'
+    os.execv(target, [target, os.path.abspath(__file__), *sys.argv[1:]])
 
 
 def log_max_bytes() -> int:
@@ -1073,6 +1096,7 @@ def cmd_help(args: list[str]):
 
 def main():
     load_env()
+    reexec_in_project_python()
     trim_log_file(LOG_FILE, log_max_bytes())
 
     commands = {
