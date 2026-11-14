@@ -60,6 +60,7 @@ Client (port 5846)
 - `custom_models.yaml` — per-model overrides merged into `config.yaml` (sampler_args, ctx_size, ttl, backend, base_model, etc.)
 - `harmony_models.yaml` — list of model names that require Harmony encoding (checked at startup)
 - `lm-studio-ollama-bridge/` — Go submodule; creates symlinks from Ollama blob store into `MODELS_DIR`
+- `ollama_fixes/` + `ollama_fixes.py` — Modelfile fixes (`FROM <model name>` + overrides) for Ollama models whose upstream template/stops are broken (empty `ollama run` replies). `./model pull`/`update` re-apply a model's fix after pulling; `./model sync` re-applies fixes to any broken model and warns about broken models with no fix file
 
 ## Model Names vs Config Names
 

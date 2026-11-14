@@ -1,0 +1,6 @@
+# Fix for the Hugging Face copy of Muse-Glimmer-30B-heretic (2026-11-14).
+# The model's own GGUF chat template is fine, but upstream's stop list included
+# <|start|> and <|message|>, which every reply opens with, so `ollama run`
+# replied with nothing. Stop only at the end-of-turn token.
+FROM hf.co/mradermacher/Muse-Glimmer-30B-heretic-GGUF:q8_0
+PARAMETER stop <|eot|>
