@@ -42,6 +42,8 @@ import sys
 import subprocess
 from pathlib import Path
 
+from ollama_fixes import OllamaModelFixes
+
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 LOG_FILE = SCRIPT_DIR / 'model_serve.log'
@@ -111,11 +113,30 @@ def run_cmd(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=check)
 
 
+def ollama_fixes() -> OllamaModelFixes:
+    """Repo-stored Modelfile fixes for models with broken upstream settings."""
+    fixes_dir = os.environ.get('OLLAMA_FIXES_DIR') or str(SCRIPT_DIR / 'ollama_fixes')
+    ollama_base = os.environ.get('OLLAMA_BASE', 'http://localhost:11434')
+    return OllamaModelFixes(SCRIPT_DIR / os.path.expanduser(fixes_dir), ollama_base)
+
+
 def ollama_pull(model_name: str) -> bool:
-    """Pull a model using Ollama."""
+    """Pull a model using Ollama, then re-apply its fix file (a pull restores upstream's)."""
     print(f"\n=== Pulling {model_name} via Ollama ===\n")
     result = run_cmd(['ollama', 'pull', model_name], check=False)
+    if result.returncode == 0 and ollama_fixes().apply(model_name):
+        print(f"Re-applied fix file for {model_name}")
     return result.returncode == 0
+
+
+def repair_broken_ollama_models():
+    """Re-apply fix files to broken models; warn about broken models without one."""
+    repaired, unfixed = ollama_fixes().repair_broken(ollama_list_names())
+    for model_name in repaired:
+        print(f"Re-applied fix file for {model_name} (its upstream settings had come back)")
+    for model_name, problems in unfixed.items():
+        print(f"Warning: {model_name} looks broken in Ollama ({', '.join(problems)}); "
+              f"`ollama run` may reply with nothing. Add a fix file to ollama_fixes/.")
 
 
 def ollama_rm(model_name: str) -> bool:
@@ -388,6 +409,7 @@ def do_sync():
     old_hash = get_config_hash()
 
     cleanup_broken_symlinks()
+    repair_broken_ollama_models()
     sync_bridge()
     regenerate_config()
 
