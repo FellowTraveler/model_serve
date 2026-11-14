@@ -9,6 +9,10 @@ fi
 LLAMA_SWAP_PORT="${LLAMA_SWAP_PORT:-5847}"
 API_URL="http://127.0.0.1:${LLAMA_SWAP_PORT}"
 
+# Same interpreter as ./model: PYTHON_BIN from .env, else the uv venv (has psutil)
+PYTHON_BIN="${PYTHON_BIN:-$SCRIPT_DIR/.venv/bin/python}"
+[ -x "$PYTHON_BIN" ] || PYTHON_BIN=python3
+
 echo "=== Model Serve Status ==="
 echo ""
 
@@ -22,7 +26,7 @@ fi
 # Check Ollama
 OLLAMA_BASE="${OLLAMA_BASE:-http://localhost:11434}"
 if curl -s "${OLLAMA_BASE}/api/version" > /dev/null 2>&1; then
-    OLLAMA_VERSION=$(curl -s "${OLLAMA_BASE}/api/version" | python3 -c "import sys,json; print(json.load(sys.stdin).get('version','?'))" 2>/dev/null || echo "?")
+    OLLAMA_VERSION=$(curl -s "${OLLAMA_BASE}/api/version" | "$PYTHON_BIN" -c "import sys,json; print(json.load(sys.stdin).get('version','?'))" 2>/dev/null || echo "?")
     echo "✓ ollama: running (v${OLLAMA_VERSION} at ${OLLAMA_BASE})"
 else
     echo "✗ ollama: not running (expected at ${OLLAMA_BASE})"
@@ -57,7 +61,7 @@ if curl -s "${API_URL}/running" > /dev/null 2>&1; then
     echo "API endpoint: ${API_URL}"
     echo ""
     echo "Loaded models:"
-    curl -s "${API_URL}/running" | python3 -m json.tool 2>/dev/null || curl -s "${API_URL}/running"
+    curl -s "${API_URL}/running" | "$PYTHON_BIN" -m json.tool 2>/dev/null || curl -s "${API_URL}/running"
 else
     echo "API not responding at ${API_URL}"
 fi
@@ -66,4 +70,4 @@ echo ""
 
 # Memory status
 echo "System memory:"
-python3 -c "import psutil; m=psutil.virtual_memory(); print(f'  Used: {m.percent}% ({m.used/1024**3:.1f}GB / {m.total/1024**3:.1f}GB)')" 2>/dev/null || echo "  (install psutil for memory info)"
+"$PYTHON_BIN" -c "import psutil; m=psutil.virtual_memory(); print(f'  Used: {m.percent}% ({m.used/1024**3:.1f}GB / {m.total/1024**3:.1f}GB)')" 2>/dev/null || echo "  (install psutil for memory info)"
