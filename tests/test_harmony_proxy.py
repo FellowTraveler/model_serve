@@ -59,11 +59,11 @@ class TestModelRouting:
     def test_ollama_model_name_mapping(self):
         """Configured model names should be translated to Ollama names."""
         # With ms/ prefix
-        mapped = get_ollama_model_name("ms/qwable-v1-gguf-34.7b-q8_0")
+        mapped = get_ollama_model_name("ms/hf.co-lordx64-qwable-v1-gguf-34.7b-q8_0")
         assert mapped == "hf.co/lordx64/Qwable-v1-GGUF:Q8_0"
 
         # Without ms/ prefix
-        mapped = get_ollama_model_name("qwable-v1-gguf-34.7b-q8_0")
+        mapped = get_ollama_model_name("hf.co-lordx64-qwable-v1-gguf-34.7b-q8_0")
         assert mapped == "hf.co/lordx64/Qwable-v1-GGUF:Q8_0"
 
         # Unknown model returns original
@@ -73,11 +73,11 @@ class TestModelRouting:
     def test_model_ctx_size_from_config(self):
         """Context size should be read from custom_models.yaml."""
         # GPT-OSS 20B (unsloth) has ctx_size: 65536 in config
-        ctx = get_model_ctx_size("ms/gpt-oss-20b-gguf-20.9b-q8_k_xl")
+        ctx = get_model_ctx_size("ms/hf.co-unsloth-gpt-oss-20b-gguf-20.9b-q8_k_xl")
         assert ctx == 65536
 
         # Without prefix
-        ctx = get_model_ctx_size("gpt-oss-20b-gguf-20.9b-q8_k_xl")
+        ctx = get_model_ctx_size("hf.co-unsloth-gpt-oss-20b-gguf-20.9b-q8_k_xl")
         assert ctx == 65536
 
     def test_model_ctx_size_default(self):
@@ -88,7 +88,7 @@ class TestModelRouting:
     def test_sampler_options_from_config(self):
         """Sampler args should be parsed from custom_models.yaml."""
         # GPT-OSS 20B (unsloth) has all sampler args explicitly configured
-        opts = get_model_sampler_options("ms/gpt-oss-20b-gguf-20.9b-q8_k_xl")
+        opts = get_model_sampler_options("ms/hf.co-unsloth-gpt-oss-20b-gguf-20.9b-q8_k_xl")
         assert opts.get("temperature") == 0.7
         assert opts.get("top_p") == 0.95
         assert opts.get("top_k") == 40

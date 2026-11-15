@@ -1,5 +1,5 @@
 models:
-  gpt-oss-20b-gguf-20.9b-q8_k_xl:
+  hf.co-unsloth-gpt-oss-20b-gguf-20.9b-q8_k_xl:
     sampler_args: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1 --repeat-last-n 64
     ctx_size: 65536
     jinja: false
@@ -10,16 +10,16 @@ models:
   # refusals, 10/10 capability, ~67-69 tok/s - but ara-v3 burned the whole thinking
   # budget on 11/30 probes (4 still unfinished at 2048 tok) vs 2/30 here, so the
   # decisive SOM variant was kept and ara-v3 removed.
-  gpt-oss-20b-sombliterated-gguf-20.9b-q8_0:
+  hf.co-mradermacher-gpt-oss-20b-sombliterated-gguf-20.9b-q8_0:
     sampler_args: --temp 0.7 --top-p 0.95 --top-k 40 --repeat-penalty 1.1 --repeat-last-n 64
     ctx_size: 65536
     jinja: false
-  gemma-3-27b-derestricted-gguf-27b-q8_0:
+  hf.co-mradermacher-gemma-3-27b-derestricted-gguf-27b-q8_0:
     sampler_args: --temp 1.5 --min-p 0.05
     ctx_size: 32768
     chat_template_file: /Users/au/src/model_serve/templates/gemma3-relaxed.jinja
   gemma27b:
-    base_model: gemma-3-27b-derestricted-gguf-27b-q8_0
+    base_model: hf.co-mradermacher-gemma-3-27b-derestricted-gguf-27b-q8_0
     sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
     chat_template_file: /Users/au/src/model_serve/templates/gemma3-relaxed.jinja
@@ -40,7 +40,7 @@ models:
     jinja: true
     sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
-  medgemma3-27.0b-q4_k_m:
+  symptoma-medgemma3-27.0b-q4_k_m:
     jinja: true
     sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
@@ -77,11 +77,11 @@ models:
     ollama_model: "gemma4:26b-a4b-it-q8_0"
     sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 131072
-  glm-4.7-flash-gguf-29.9b-q8_k_xl:
+  hf.co-unsloth-glm-4.7-flash-gguf-29.9b-q8_k_xl:
     jinja: true
     sampler_args: --reasoning-budget 0 --top-nsigma 1.5 --min-p 0.05 --temp 1.2
     ctx_size: 65536
-  glm-4.7-flash-derestricted-gguf-29.9b-q8_0:
+  hf.co-mradermacher-glm-4.7-flash-derestricted-gguf-29.9b-q8_0:
     jinja: true
     sampler_args: --reasoning-budget 0 --top-nsigma 1.5 --min-p 0.05 --temp 1.2
     ctx_size: 65536
@@ -146,7 +146,7 @@ models:
     ctx_size: 131072
   # Qwable-v1: Qwen3.6-35B-A3B finetune - same arch, must route to Ollama
   # Model card: temp 0.6, top_p 0.9; preserve_thinking for KV cache correctness
-  qwable-v1-gguf-34.7b-q8_0:
+  hf.co-lordx64-qwable-v1-gguf-34.7b-q8_0:
     backend: ollama
     ollama_model: "hf.co/lordx64/Qwable-v1-GGUF:Q8_0"
     chat_template_kwargs: '{"preserve_thinking": true}'
@@ -182,7 +182,7 @@ models:
   # --spec-type draft-mtp enables self-speculative decoding via the model's MTP layer
   # mmproj: vision projector from the same unsloth repo (ollama hf.co pull skips it,
   # so it lives in the project mmproj/ dir; download via mmproj/README.md)
-  qwen3.8-27b-gguf-27.3b-ud-q8_k_xl:
+  hf.co-unsloth-qwen3.8-27b-gguf-27.3b-ud-q8_k_xl:
     jinja: true
     mmproj: /Users/au/src/model_serve/mmproj/Qwen3.8-27B-mmproj-F16.gguf
     chat_template_kwargs: '{"reasoning_effort": "medium"}'
@@ -219,7 +219,7 @@ models:
   # Template defaults reasoning_strength to 'high' - override to medium; 4k thinking cap.
   # mmproj Q8_0 (not F16): the ViT-G/14 encoder is 1.8B params (F16 = 3.7GB), frozen in
   # both variants, and Q8_0 loss on a vision encoder is negligible.
-  muse-glimmer-30b-heretic-gguf-27.9b-q8_0:
+  hf.co-mradermacher-muse-glimmer-30b-heretic-gguf-27.9b-q8_0:
     jinja: true
     mmproj: /Users/au/src/model_serve/mmproj/Muse-Glimmer-30B-heretic-mmproj-Q8_0.gguf
     chat_template_kwargs: '{"reasoning_strength": "medium"}'
