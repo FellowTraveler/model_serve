@@ -271,10 +271,6 @@ models:
     jinja: true
     sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.7
     ctx_size: 32768
-  devstral-small-2-24.0b-q8_0:
-    jinja: true
-    sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.4
-    ctx_size: 32768
   devstral-small-2-24.0b-q4_k_m:
     jinja: true
     sampler_args: --top-nsigma 1.5 --min-p 0.05 --temp 0.4
