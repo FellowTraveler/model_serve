@@ -23,20 +23,20 @@ models:
     sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
     chat_template_file: /Users/au/src/model_serve/templates/gemma3-relaxed.jinja
-  gemma3-12.2b-q8_0:
+  gemma3-11.8b-q8_0:
     jinja: true
     sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
   gemma3-creative:
-    base_model: gemma3-12.2b-q8_0
+    base_model: gemma3-11.8b-q8_0
     jinja: true
     sampler_args: --temp 1.2 --top-p 0.9 --top-k 64
     ctx_size: 8192
-  gemma3-4.3b-f16:
+  gemma3-3.9b-bf16:
     jinja: true
     sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
-  gemma3-27.4b-q8_0:
+  gemma3-27.0b-q8_0:
     jinja: true
     sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
@@ -44,8 +44,26 @@ models:
     jinja: true
     sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
+  # Ollama's registry still serves these in its own format, which llama.cpp
+  # can't load (no gemma3.attention.layer_norm_rms_epsilon); route to Ollama.
   translategemma-12.2b-q8_0:
-    jinja: true
+    backend: ollama
+    ollama_model: "translategemma:12b-it-q8_0"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
+    ctx_size: 32768
+  medgemma-27.4b-q4_k_m:
+    backend: ollama
+    ollama_model: "medgemma:27b"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
+    ctx_size: 32768
+  medgemma1.5-4.3b-q4_k_m:
+    backend: ollama
+    ollama_model: "medgemma1.5:latest"
+    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
+    ctx_size: 32768
+  medgemma1.5-4.3b-q8_0:
+    backend: ollama
+    ollama_model: "medgemma1.5:4b-it-q8_0"
     sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
   gemma3-12.2b-q4_0:
@@ -85,7 +103,7 @@ models:
     jinja: true
     sampler_args: --reasoning-budget 0 --top-nsigma 1.5 --min-p 0.05 --temp 1.2
     ctx_size: 65536
-  qwen3-vl-31.1b-q8_0:
+  qwen3-vl-30.5b-q8_0:
     jinja: true
     chat_template_kwargs: '{"enable_thinking": false}'
     sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
