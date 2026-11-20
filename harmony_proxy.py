@@ -1702,7 +1702,15 @@ app.include_router(create_decision_router(
 async def list_models():
     """List available models: llama-swap's, plus the installed models routed to Ollama."""
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(f"{LLAMA_SWAP_BASE}/v1/models")
+        try:
+            resp = await client.get(f"{LLAMA_SWAP_BASE}/v1/models")
+        except httpx.HTTPError as e:
+            # e.g. llama-swap restarting after ./model pull or sync
+            logger.warning(f"llama-swap model list unavailable: {e}")
+            return JSONResponse(
+                content={"error": {"message": f"llama-swap unavailable: {e}", "type": "server_error"}},
+                status_code=502,
+            )
         if resp.status_code != 200:
             return json_response_from_backend(resp)
         try:
