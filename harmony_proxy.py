@@ -21,6 +21,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from decision_route import create_decision_router
+from request_log import RequestLogger
 from ollama_routed_models import installed_ollama_tags, merge_model_lists, ollama_routed_model_entries
 
 # Configure logging
@@ -408,27 +409,17 @@ ENC = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
 # FastAPI app
 app = FastAPI(title="Harmony Proxy", description="OpenAI/Anthropic proxy with Harmony support")
 
-# Request logging directory
-REQUEST_LOG_DIR = Path(os.path.dirname(__file__)) / "request_logs"
-REQUEST_LOG_DIR.mkdir(exist_ok=True)
+# Request logs: metadata only unless REQUEST_LOG_BODIES=true; pruned after
+# REQUEST_LOG_RETENTION_DAYS (see request_log.py)
+REQUEST_LOGGER = RequestLogger.from_env(Path(os.path.dirname(__file__)) / "request_logs")
+_pruned = REQUEST_LOGGER.prune()
+if _pruned:
+    logger.info(f"Pruned {_pruned} request logs older than the retention period")
 
 
 def log_request(endpoint: str, body: dict, source: str = "unknown"):
-    """Log incoming request to file for debugging."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    model = body.get("model", "unknown")
-    log_file = REQUEST_LOG_DIR / f"{timestamp}_{model.replace('/', '_')}_{endpoint.replace('/', '_')}.json"
-
-    log_data = {
-        "timestamp": datetime.now().isoformat(),
-        "endpoint": endpoint,
-        "source": source,
-        "body": body,
-    }
-
-    with open(log_file, "w") as f:
-        json.dump(log_data, f, indent=2)
-
+    """Log an incoming request (metadata, or the full body when enabled)."""
+    log_file = REQUEST_LOGGER.log_request(endpoint, body, source)
     logger.info(f"Logged request to {log_file}")
     return log_file
 
@@ -949,13 +940,15 @@ async def proxy_to_backend(base_url: str, path: str, body: dict, stream: bool):
 
     if stream:
         async def iter_stream():
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            model = body.get("model", "unknown").replace("/", "_")
-            response_log = REQUEST_LOG_DIR / f"{timestamp}_{model}_response.jsonl"
+            response_log = REQUEST_LOGGER.response_log_path(body.get("model", "unknown"))
 
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream("POST", url, json=body, timeout=None) as resp:
-                    with open(response_log, "w") as f:
+                    if response_log is None:
+                        async for chunk in resp.aiter_raw():
+                            yield chunk
+                        return
+                    with open(response_log, "a") as f:
                         async for chunk in resp.aiter_raw():
                             f.write(chunk.decode("utf-8", errors="replace"))
                             yield chunk
