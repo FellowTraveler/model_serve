@@ -84,6 +84,8 @@ GPT-OSS models require Harmony encoding — a custom format that maps OpenAI mes
 
 All runtime config comes from `.env` (copy `.env.example`). Key variables: `HARMONY_PROXY_PORT` (5846), `LLAMA_SWAP_PORT` (5847), `OLLAMA_BASE`, `MODEL_TTL`, `MEMORY_PRESSURE_THRESHOLD`, `MODELS_DIR`, `MODEL_PREFIX`. Never hardcode these values in code.
 
+Request logs (`request_logs/`, `request_log.py`) hold metadata only (time, model, endpoint, counts), never message content, unless `REQUEST_LOG_BODIES=true` is set for debugging; they're private (0700/0600) and pruned after `REQUEST_LOG_RETENTION_DAYS` (7). Tests write to a temp folder (`tests/conftest.py`).
+
 ## Testing Notes
 
 Tests import directly from `harmony_proxy.py` — the test runner must be launched from the project root so Python can resolve the module. Tests use `pytest`; no test database or external services required for unit tests (mocked with pytest fixtures).
