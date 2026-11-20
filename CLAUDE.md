@@ -49,6 +49,7 @@ Client (port 5846)
             ├── GPT-OSS / Harmony models  → llama-swap (port 5847)   [with Harmony encode/decode]
             ├── MXFP4 models              → Ollama (port 11434)       [llama.cpp can't do MXFP4]
             ├── Embedding models          → Ollama                    [models with "embed" in name]
+            ├── Decision models (Jev)     → Ollama                    [POST /v1/systemone; probabilities, decision_route.py]
             ├── lm_studio backend         → LM Studio (port 1234)
             └── All other models          → llama-swap (port 5847)    [passthrough]
 ```
