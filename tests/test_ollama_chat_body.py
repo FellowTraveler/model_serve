@@ -69,3 +69,45 @@ def test_tools_are_passed_through():
     tools = [{"type": "function", "function": {"name": "search_email", "parameters": {"type": "object"}}}]
     body = build_ollama_chat_body({"model": OLLAMA_ROUTED_MODEL, "messages": [], "tools": tools}, stream=False)
     assert body["tools"] == tools
+
+
+def test_explicit_zero_values_override_the_route():
+    """temperature 0 (deterministic triage) and seed 0 are real settings, not 'unset'."""
+    body = build_ollama_chat_body(
+        {"model": OLLAMA_ROUTED_MODEL, "messages": [], "temperature": 0, "top_p": 0.0, "seed": 0},
+        stream=False,
+    )
+    assert body["options"]["temperature"] == 0
+    assert body["options"]["top_p"] == 0.0
+    assert body["options"]["seed"] == 0
+
+
+def test_all_request_sampling_fields_are_forwarded():
+    sent = {"top_k": 1, "min_p": 0.1, "stop": ["\n\n"], "presence_penalty": 0.5,
+            "frequency_penalty": 0.25, "repeat_penalty": 1.1, "max_completion_tokens": 9}
+    body = build_ollama_chat_body({"model": OLLAMA_ROUTED_MODEL, "messages": [], **sent}, stream=False)
+    for key in ("top_k", "min_p", "stop", "presence_penalty", "frequency_penalty", "repeat_penalty"):
+        assert body["options"][key] == sent[key]
+    assert body["options"]["num_predict"] == 9
+
+
+def test_log_reports_the_options_actually_sent(monkeypatch, caplog):
+    import json
+    import logging
+
+    import httpx
+    from fastapi.testclient import TestClient
+
+    import harmony_proxy
+
+    real_async_client = httpx.AsyncClient
+    monkeypatch.setattr(harmony_proxy.httpx, "AsyncClient", lambda **kwargs: real_async_client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(
+            200, json={"message": {"role": "assistant", "content": "{}"}, "done": True}))))
+    with caplog.at_level(logging.INFO, logger="harmony_proxy"):
+        TestClient(harmony_proxy.app).post("/v1/chat/completions", json={
+            "model": OLLAMA_ROUTED_MODEL, "temperature": 0,
+            "response_format": {"type": "json_object"}, "messages": [{"role": "user", "content": "x"}],
+        })
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("Ollama chat:"))
+    assert "'temperature': 0," in line

@@ -987,6 +987,13 @@ async def proxy_openai_endpoint(path: str, body: dict, stream: bool):
     return await proxy_to_backend(LLAMA_SWAP_BASE, path, body, stream)
 
 
+# OpenAI-request sampling fields passed to Ollama as options of the same name.
+REQUEST_SAMPLING_OPTIONS = (
+    "temperature", "top_p", "top_k", "min_p", "seed", "stop",
+    "presence_penalty", "frequency_penalty", "repeat_penalty",
+)
+
+
 def build_ollama_chat_body(body: dict, stream: bool) -> dict:
     """Translate an OpenAI chat request into an Ollama native /api/chat request."""
     model = body.get("model", "")
@@ -998,8 +1005,9 @@ def build_ollama_chat_body(body: dict, stream: bool) -> dict:
         "keep_alive": OLLAMA_KEEP_ALIVE_SECONDS,
         "options": {"num_ctx": get_model_ctx_size(model), **get_model_sampler_options(model)},
     }
-    if "max_tokens" in body:
-        ollama_body["options"]["num_predict"] = body["max_tokens"]
+    for key in ("max_tokens", "max_completion_tokens"):  # OpenAI's old and new names
+        if key in body:
+            ollama_body["options"]["num_predict"] = body[key]
     # Pass through tools for function calling
     if "tools" in body:
         ollama_body["tools"] = body["tools"]
@@ -1009,8 +1017,9 @@ def build_ollama_chat_body(body: dict, stream: bool) -> dict:
         ollama_body["format"] = "json"
     elif response_format.get("type") == "json_schema":
         ollama_body["format"] = response_format.get("json_schema", {}).get("schema", "json")
-    # Let request-level overrides take precedence
-    for key in ("temperature", "top_p"):
+    # Sampling fields the client sends win over the route's defaults. Test presence,
+    # not truthiness: an explicit 0 (temperature 0, seed 0) is a real setting.
+    for key in REQUEST_SAMPLING_OPTIONS:
         if key in body:
             ollama_body["options"][key] = body[key]
     return ollama_body
@@ -1050,14 +1059,13 @@ async def handle_ollama_chat(body: dict, stream: bool):
     model = body.get("model", "")
     ollama_body = build_ollama_chat_body(body, stream)
     ollama_model = ollama_body["model"]
-    ctx_size = ollama_body["options"]["num_ctx"]
-    sampler_opts = get_model_sampler_options(model)
 
     url = f"{OLLAMA_BASE}/api/chat"
     chat_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
     created = int(datetime.now().timestamp())
 
-    logger.info(f"Ollama chat: {model} -> {ollama_model}, num_ctx={ctx_size}, sampler={sampler_opts}")
+    # Log the options actually sent (route defaults plus the client's overrides)
+    logger.info(f"Ollama chat: {model} -> {ollama_model}, options={ollama_body['options']}")
 
     def sse_chunk(delta: dict, finish_reason: Optional[str]) -> str:
         data = json.dumps({
