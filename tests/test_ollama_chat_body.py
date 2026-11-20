@@ -54,3 +54,18 @@ def test_json_schema_response_format_passes_the_schema():
 def test_no_response_format_means_free_text():
     body = build_ollama_chat_body({"model": OLLAMA_ROUTED_MODEL, "messages": []}, stream=False)
     assert "format" not in body
+
+
+def test_without_sampling_options_the_route_settings_apply():
+    """RustyMail's model_serve provider sends no sampling; the route's sampler_args decide."""
+    body = build_ollama_chat_body({"model": OLLAMA_ROUTED_MODEL, "messages": []}, stream=False)
+    assert body["options"]["temperature"] == 1.0
+    assert body["options"]["top_p"] == 0.95
+    assert body["options"]["top_k"] == 64
+    assert body["think"] is False
+
+
+def test_tools_are_passed_through():
+    tools = [{"type": "function", "function": {"name": "search_email", "parameters": {"type": "object"}}}]
+    body = build_ollama_chat_body({"model": OLLAMA_ROUTED_MODEL, "messages": [], "tools": tools}, stream=False)
+    assert body["tools"] == tools
