@@ -260,6 +260,11 @@ models:
     backend: ollama
     ollama_model: "qwen3-coder-next:Q8_0"
     ctx_size: 32768
+  # Jev: decision model (capability "decision" only - no chat). Use POST /v1/systemone on
+  # the proxy with {"model", "state", "questions"}; it returns probabilities, not text.
+  autotrust-jev-9b:
+    backend: ollama
+    ollama_model: "autotrust-jev:9b"
   # Embedding models - route to Ollama
   nomic-embed-text-137m-f16:
     ollama_model: nomic-embed-text:latest

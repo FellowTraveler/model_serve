@@ -20,6 +20,8 @@ from typing import Optional
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
+from decision_route import create_decision_router
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -1677,6 +1679,16 @@ async def embeddings(request: Request):
     else:
         # Non-embedding models passthrough to llama-swap
         return await proxy_openai_endpoint("/v1/embeddings", body, stream=False)
+
+
+# Decision models (Jev): POST /v1/systemone, forwarded to Ollama
+app.include_router(create_decision_router(
+    ollama_base=OLLAMA_BASE,
+    keep_alive_seconds=OLLAMA_KEEP_ALIVE_SECONDS,
+    map_model_name=get_ollama_model_name,
+    to_response=json_response_from_backend,
+    logger=logger,
+))
 
 
 @app.get("/v1/models")
