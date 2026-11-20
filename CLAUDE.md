@@ -12,6 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Server control
 ./model start           # Start everything (harmony_proxy, llama-swap, sync_loop, pressure_unloader)
 ./model stop            # Stop all services
+# With the launchd agent installed (./setup_service.sh install, KeepAlive), start/stop go
+# through launchctl; never run start.sh by hand beside it (that runs a second stack).
 ./model status          # Check what's running
 ./model stats           # Show loaded models + memory usage
 
