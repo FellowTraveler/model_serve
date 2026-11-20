@@ -170,8 +170,8 @@ class TestMLXBackend:
 
     def test_mlx_model_name_no_mapping(self):
         """Models without mlx_model mapping should return base name."""
-        name = get_mlx_model_name("ms/gemma3-12.2b-q8_0")
-        assert name == "gemma3-12.2b-q8_0"
+        name = get_mlx_model_name("ms/gemma3-3.9b-bf16")
+        assert name == "gemma3-3.9b-bf16"
 
 
 class TestLMStudioBackend:
@@ -180,7 +180,7 @@ class TestLMStudioBackend:
     def test_get_model_backend_default(self):
         """Models without explicit backend should default to llama_swap."""
         # A model that exists but has no backend specified
-        backend = get_model_backend("ms/gemma3-12.2b-q8_0")
+        backend = get_model_backend("ms/gemma3-3.9b-bf16")
         assert backend == "llama_swap"
 
     def test_get_model_backend_mxfp4_routes_to_ollama(self):
@@ -201,8 +201,8 @@ class TestLMStudioBackend:
     def test_lm_studio_model_name_no_mapping(self):
         """Models without lm_studio_model mapping should return base name."""
         # A model that exists but has no lm_studio_model mapping
-        name = get_lm_studio_model_name("ms/gemma3-12.2b-q8_0")
-        assert name == "gemma3-12.2b-q8_0"  # Returns base name (without prefix)
+        name = get_lm_studio_model_name("ms/gemma3-3.9b-bf16")
+        assert name == "gemma3-3.9b-bf16"  # Returns base name (without prefix)
 
     def test_lm_studio_model_name_strips_prefix(self):
         """LM Studio model name should strip the ms/ prefix."""
@@ -220,7 +220,7 @@ class TestLMStudioBackend:
         NOT supported: top_nsigma (llama.cpp-specific)
         """
         # Use a known model with sampler_args
-        opts = get_model_sampler_options("ms/gemma3-12.2b-q8_0")
+        opts = get_model_sampler_options("ms/gemma3-3.9b-bf16")
 
         # These should be parsed from sampler_args
         assert "temperature" in opts or "top_p" in opts or "top_k" in opts

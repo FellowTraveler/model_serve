@@ -16,7 +16,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVICE_NAME="com.model-serve.agent"
+SERVICE_NAME="${MODEL_SERVE_SERVICE_LABEL:-com.model-serve.agent}"
 LOG_FILE="$SCRIPT_DIR/model_serve.log"
 
 # Detect platform
@@ -111,8 +111,7 @@ macos_uninstall() {
 
 macos_start() {
     if [ -f "$PLIST_PATH" ]; then
-        launchctl load "$PLIST_PATH" 2>/dev/null || launchctl start "$SERVICE_NAME"
-        echo "Service started."
+        "$SCRIPT_DIR/model" start
     else
         echo "Service not installed. Run './setup_service.sh install' first."
         exit 1
@@ -120,12 +119,8 @@ macos_start() {
 }
 
 macos_stop() {
-    if [ -f "$PLIST_PATH" ]; then
-        launchctl stop "$SERVICE_NAME" 2>/dev/null || true
-        echo "Service stopped."
-    else
-        "$SCRIPT_DIR/model" stop
-    fi
+    # ./model stop unloads the agent first; `launchctl stop` alone is undone by KeepAlive.
+    "$SCRIPT_DIR/model" stop
 }
 
 macos_status() {
