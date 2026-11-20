@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 import harmony_proxy
 from ollama_routed_models import (
-    installed_ollama_tags,
+    installed_ollama_models,
     merge_model_lists,
     ollama_routed_model_entries,
 )
@@ -18,7 +18,11 @@ CUSTOM = {
     "lm-studio-model": {"backend": "lm_studio", "lm_studio_model": "x"},
     "empty-entry": None,
 }
-INSTALLED = {"gemma4:26b-a4b-it-q4_K_M", "autotrust-jev:9b", "medgemma1.5:latest"}
+INSTALLED = {
+    "gemma4:26b-a4b-it-q4_K_M": ["completion", "vision", "tools", "thinking"],
+    "autotrust-jev:9b": ["decision"],
+    "medgemma1.5:latest": ["completion"],
+}
 
 
 def test_lists_only_installed_ollama_routes_with_prefixed_names():
@@ -30,8 +34,18 @@ def test_lists_only_installed_ollama_routes_with_prefixed_names():
     assert entries[0]["meta"]["model_serve"]["ollama_model"] == "gemma4:26b-a4b-it-q4_K_M"
 
 
-def test_installed_tags_come_from_api_tags():
-    assert installed_ollama_tags({"models": [{"name": "a:1b"}, {"name": "b:latest"}]}) == {"a:1b", "b:latest"}
+def test_entries_carry_ollama_capabilities():
+    """Clients keep decision-only models like Jev out of chat menus by these."""
+    entries = {e["id"]: e for e in ollama_routed_model_entries(CUSTOM, INSTALLED, "ms/", 123)}
+    assert entries["ms/autotrust-jev-9b"]["meta"]["model_serve"]["capabilities"] == ["decision"]
+    assert "completion" in entries["ms/gemma4-26b-a4b-it-q4_k_m"]["meta"]["model_serve"]["capabilities"]
+    # an untagged ollama_model is found under Ollama's name:latest
+    assert entries["ms/medgemma1.5-4.3b-q4_k_m"]["meta"]["model_serve"]["capabilities"] == ["completion"]
+
+
+def test_installed_models_and_capabilities_come_from_api_tags():
+    tags = {"models": [{"name": "a:1b", "capabilities": ["decision"]}, {"name": "b:latest"}]}
+    assert installed_ollama_models(tags) == {"a:1b": ["decision"], "b:latest": []}
 
 
 def test_merge_keeps_llama_swap_entries_and_skips_duplicate_ids():
@@ -48,7 +62,7 @@ def fake_backends(monkeypatch, ollama_up: bool):
         if request.url.path == "/api/tags":
             if not ollama_up:
                 raise httpx.ConnectError("refused")
-            return httpx.Response(200, json={"models": [{"name": "autotrust-jev:9b"}]})
+            return httpx.Response(200, json={"models": [{"name": "autotrust-jev:9b", "capabilities": ["decision"]}]})
         return httpx.Response(404)
 
     real_async_client = httpx.AsyncClient
@@ -58,9 +72,9 @@ def fake_backends(monkeypatch, ollama_up: bool):
 
 def test_endpoint_adds_ollama_routes(monkeypatch):
     fake_backends(monkeypatch, ollama_up=True)
-    ids = [m["id"] for m in TestClient(harmony_proxy.app).get("/v1/models").json()["data"]]
-    assert "ms/qwen3-4.0b-q8_0" in ids
-    assert "ms/autotrust-jev-9b" in ids
+    models = {m["id"]: m for m in TestClient(harmony_proxy.app).get("/v1/models").json()["data"]}
+    assert "ms/qwen3-4.0b-q8_0" in models
+    assert models["ms/autotrust-jev-9b"]["meta"]["model_serve"]["capabilities"] == ["decision"]
 
 
 def test_endpoint_still_lists_llama_swap_models_when_ollama_is_down(monkeypatch):
