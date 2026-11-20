@@ -1023,6 +1023,28 @@ def build_ollama_chat_body(body: dict, stream: bool) -> dict:
     return ollama_body
 
 
+def openai_tool_calls(ollama_tool_calls: list, first_index: Optional[int] = None) -> list:
+    """Ollama message.tool_calls -> OpenAI tool_calls.
+
+    Streamed deltas must carry each call's position in the reply; pass first_index
+    (the number of calls already sent) to number them.
+    """
+    converted = []
+    for position, tc in enumerate(ollama_tool_calls):
+        call = {
+            "id": tc.get("id", f"call_{uuid.uuid4().hex[:8]}"),
+            "type": "function",
+            "function": {
+                "name": tc["function"]["name"],
+                "arguments": json.dumps(tc["function"]["arguments"]),
+            },
+        }
+        if first_index is not None:
+            call["index"] = first_index + position
+        converted.append(call)
+    return converted
+
+
 async def handle_ollama_chat(body: dict, stream: bool):
     """
     Route chat completions through Ollama's native /api/chat endpoint.
@@ -1044,8 +1066,17 @@ async def handle_ollama_chat(body: dict, stream: bool):
 
     logger.info(f"Ollama chat: {model} -> {ollama_model}, num_ctx={ctx_size}, sampler={sampler_opts}")
 
+    def sse_chunk(delta: dict, finish_reason: Optional[str]) -> str:
+        data = json.dumps({
+            "id": chat_id, "object": "chat.completion.chunk",
+            "created": created, "model": model,
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        })
+        return f"data: {data}\n\n"
+
     if stream:
         async def iter_sse():
+            tool_call_count = 0
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream("POST", url, json=ollama_body, timeout=None) as resp:
                     async for line in resp.aiter_lines():
@@ -1058,24 +1089,17 @@ async def handle_ollama_chat(body: dict, stream: bool):
 
                         msg = chunk.get("message", {})
                         content = msg.get("content", "")
-                        done = chunk.get("done", False)
 
-                        if done:
-                            # Final chunk with finish_reason
-                            sse_data = json.dumps({
-                                "id": chat_id, "object": "chat.completion.chunk",
-                                "created": created, "model": model,
-                                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-                            })
-                            yield f"data: {sse_data}\n\n"
+                        if msg.get("tool_calls"):
+                            # Ollama sends each tool call whole, in one chunk
+                            deltas = openai_tool_calls(msg["tool_calls"], first_index=tool_call_count)
+                            tool_call_count += len(deltas)
+                            yield sse_chunk({"tool_calls": deltas}, None)
+                        if content:
+                            yield sse_chunk({"content": content}, None)
+                        if chunk.get("done", False):
+                            yield sse_chunk({}, "tool_calls" if tool_call_count else "stop")
                             yield "data: [DONE]\n\n"
-                        elif content:
-                            sse_data = json.dumps({
-                                "id": chat_id, "object": "chat.completion.chunk",
-                                "created": created, "model": model,
-                                "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}],
-                            })
-                            yield f"data: {sse_data}\n\n"
         return StreamingResponse(iter_sse(), media_type="text/event-stream")
     else:
         async with httpx.AsyncClient(timeout=None) as client:
@@ -1089,18 +1113,7 @@ async def handle_ollama_chat(body: dict, stream: bool):
         # Build OpenAI-format message
         openai_msg = {"role": "assistant", "content": msg.get("content", "")}
         if "tool_calls" in msg:
-            # Convert Ollama tool_calls to OpenAI format
-            openai_msg["tool_calls"] = [
-                {
-                    "id": tc.get("id", f"call_{uuid.uuid4().hex[:8]}"),
-                    "type": "function",
-                    "function": {
-                        "name": tc["function"]["name"],
-                        "arguments": json.dumps(tc["function"]["arguments"]),
-                    },
-                }
-                for tc in msg["tool_calls"]
-            ]
+            openai_msg["tool_calls"] = openai_tool_calls(msg["tool_calls"])
 
         finish_reason = data.get("done_reason", "stop")
         if "tool_calls" in msg:
