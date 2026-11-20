@@ -49,6 +49,9 @@ LLAMA_SWAP_BASE = os.environ.get("LLAMA_SWAP_BASE", f"http://127.0.0.1:{LLAMA_SW
 
 # Ollama backend for MXFP4 models (llama.cpp doesn't support MXFP4)
 OLLAMA_BASE = os.environ.get("OLLAMA_BASE", "http://localhost:11434")
+# Seconds an Ollama-routed model stays loaded after a request; the same TTL
+# llama-swap models get (Ollama's own default is 5 minutes).
+OLLAMA_KEEP_ALIVE_SECONDS = int(os.environ.get("MODEL_TTL", "1800"))
 
 # LM Studio backend for models with backend: lm_studio
 LM_STUDIO_BASE = os.environ.get("LM_STUDIO_BASE", "http://127.0.0.1:1234")
@@ -988,6 +991,35 @@ async def proxy_openai_endpoint(path: str, body: dict, stream: bool):
     return await proxy_to_backend(LLAMA_SWAP_BASE, path, body, stream)
 
 
+def build_ollama_chat_body(body: dict, stream: bool) -> dict:
+    """Translate an OpenAI chat request into an Ollama native /api/chat request."""
+    model = body.get("model", "")
+    ollama_body = {
+        "model": get_ollama_model_name(model),
+        "messages": body.get("messages", []),
+        "stream": stream,
+        "think": False,
+        "keep_alive": OLLAMA_KEEP_ALIVE_SECONDS,
+        "options": {"num_ctx": get_model_ctx_size(model), **get_model_sampler_options(model)},
+    }
+    if "max_tokens" in body:
+        ollama_body["options"]["num_predict"] = body["max_tokens"]
+    # Pass through tools for function calling
+    if "tools" in body:
+        ollama_body["tools"] = body["tools"]
+    # OpenAI response_format -> Ollama format ("json", or a JSON schema object)
+    response_format = body.get("response_format") or {}
+    if response_format.get("type") == "json_object":
+        ollama_body["format"] = "json"
+    elif response_format.get("type") == "json_schema":
+        ollama_body["format"] = response_format.get("json_schema", {}).get("schema", "json")
+    # Let request-level overrides take precedence
+    for key in ("temperature", "top_p"):
+        if key in body:
+            ollama_body["options"][key] = body[key]
+    return ollama_body
+
+
 async def handle_ollama_chat(body: dict, stream: bool):
     """
     Route chat completions through Ollama's native /api/chat endpoint.
@@ -998,27 +1030,10 @@ async def handle_ollama_chat(body: dict, stream: bool):
     Converts Ollama's response format to OpenAI format.
     """
     model = body.get("model", "")
-    ollama_model = get_ollama_model_name(model)
-    ctx_size = get_model_ctx_size(model)
+    ollama_body = build_ollama_chat_body(body, stream)
+    ollama_model = ollama_body["model"]
+    ctx_size = ollama_body["options"]["num_ctx"]
     sampler_opts = get_model_sampler_options(model)
-
-    # Build Ollama native request
-    ollama_body = {
-        "model": ollama_model,
-        "messages": body.get("messages", []),
-        "stream": stream,
-        "think": False,
-        "options": {"num_ctx": ctx_size, **sampler_opts},
-    }
-    if "max_tokens" in body:
-        ollama_body["options"]["num_predict"] = body["max_tokens"]
-    # Pass through tools for function calling
-    if "tools" in body:
-        ollama_body["tools"] = body["tools"]
-    # Let request-level overrides take precedence
-    for key in ("temperature", "top_p"):
-        if key in body:
-            ollama_body["options"][key] = body[key]
 
     url = f"{OLLAMA_BASE}/api/chat"
     chat_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
@@ -1143,6 +1158,7 @@ async def handle_chat_with_harmony(body: dict, stream: bool, backend: Optional[s
             "prompt": harmony_prompt,
             "stream": True,
             "raw": True,
+            "keep_alive": OLLAMA_KEEP_ALIVE_SECONDS,
             "options": {
                 "stop": [],
                 "repeat_penalty": 1.1,
