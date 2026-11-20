@@ -68,3 +68,15 @@ def test_endpoint_still_lists_llama_swap_models_when_ollama_is_down(monkeypatch)
     resp = TestClient(harmony_proxy.app).get("/v1/models")
     assert resp.status_code == 200
     assert [m["id"] for m in resp.json()["data"]] == ["ms/qwen3-4.0b-q8_0"]
+
+
+def test_endpoint_reports_unreachable_llama_swap_as_502(monkeypatch):
+    def refuse(request: httpx.Request):
+        raise httpx.ConnectError("All connection attempts failed")
+
+    real_async_client = httpx.AsyncClient
+    monkeypatch.setattr(harmony_proxy.httpx, "AsyncClient",
+                        lambda **kwargs: real_async_client(transport=httpx.MockTransport(refuse)))
+    resp = TestClient(harmony_proxy.app, raise_server_exceptions=False).get("/v1/models")
+    assert resp.status_code == 502
+    assert "llama-swap unavailable" in resp.json()["error"]["message"]
