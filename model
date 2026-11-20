@@ -1071,8 +1071,54 @@ def cmd_stats(args: list[str]):
         pass
 
 
+def launchd_service_label() -> str:
+    """Label of the launchd agent ./setup_service.sh installs."""
+    return os.environ.get('MODEL_SERVE_SERVICE_LABEL', 'com.model-serve.agent')
+
+
+def launchd_plist_path() -> Path:
+    return Path.home() / 'Library' / 'LaunchAgents' / f'{launchd_service_label()}.plist'
+
+
+def launchd_target() -> str:
+    """launchctl service target, e.g. gui/502/com.model-serve.agent."""
+    return f'gui/{os.getuid()}/{launchd_service_label()}'
+
+
+def launchd_service_installed() -> bool:
+    return sys.platform == 'darwin' and launchd_plist_path().is_file()
+
+
+def launchd_service_loaded() -> bool:
+    result = subprocess.run(['launchctl', 'print', launchd_target()], capture_output=True)
+    return result.returncode == 0
+
+
+def start_launchd_service():
+    """Start the stack through launchd, which keeps it alive (KeepAlive).
+
+    Starting start.sh ourselves beside a loaded agent runs two stacks.
+    """
+    if launchd_service_loaded():
+        subprocess.run(['launchctl', 'kickstart', launchd_target()], check=False)
+    else:
+        subprocess.run(['launchctl', 'bootstrap', f'gui/{os.getuid()}', str(launchd_plist_path())],
+                       check=False)
+    print(f"Started via launchd ({launchd_service_label()}). Use './model status' to check.")
+
+
+def stop_launchd_service():
+    """Unload the agent so KeepAlive doesn't restart what stop.sh kills."""
+    if launchd_service_loaded():
+        subprocess.run(['launchctl', 'bootout', launchd_target()], check=False)
+
+
 def cmd_start(args: list[str]):
     """Start the server stack in background."""
+    if launchd_service_installed():
+        start_launchd_service()
+        return
+
     log_file = LOG_FILE
 
     # Check if already running
@@ -1099,6 +1145,8 @@ def cmd_start(args: list[str]):
 def cmd_stop(args: list[str]):
     """Stop all services."""
     print("Stopping server stack...")
+    if launchd_service_installed():
+        stop_launchd_service()
     result = subprocess.run([str(SCRIPT_DIR / 'stop.sh')], check=False)
     if result.returncode == 0:
         print("Server stopped.")
