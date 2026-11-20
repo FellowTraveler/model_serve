@@ -24,6 +24,9 @@ fi
 
 LLAMA_SWAP_PORT="${LLAMA_SWAP_PORT:-5847}"
 HARMONY_PROXY_PORT="${HARMONY_PROXY_PORT:-5846}"
+# Idle keep-alive connections stay open this long; must outlast clients' pools
+# (reqwest keeps idle connections 90 s) or a reused connection can be closed under them.
+HARMONY_PROXY_KEEP_ALIVE_SECONDS="${HARMONY_PROXY_KEEP_ALIVE_SECONDS:-120}"
 # Interface the servers listen on. Loopback by default so the models are only
 # reachable from this machine; set BIND_HOST=0.0.0.0 in .env to expose them.
 BIND_HOST="${BIND_HOST:-127.0.0.1}"
@@ -142,7 +145,8 @@ start_mlx_server() {
 start_harmony_proxy() {
     echo "Starting Harmony proxy on port ${HARMONY_PROXY_PORT}..."
     LLAMA_SWAP_BASE="http://127.0.0.1:${LLAMA_SWAP_PORT}" \
-        "$PYTHON_BIN" -m uvicorn harmony_proxy:app --host "${BIND_HOST}" --port "${HARMONY_PROXY_PORT}" &
+        "$PYTHON_BIN" -m uvicorn harmony_proxy:app --host "${BIND_HOST}" --port "${HARMONY_PROXY_PORT}" \
+        --timeout-keep-alive "${HARMONY_PROXY_KEEP_ALIVE_SECONDS}" &
     HARMONY_PROXY_PID=$!
     echo "Harmony proxy PID: $HARMONY_PROXY_PID"
 }
