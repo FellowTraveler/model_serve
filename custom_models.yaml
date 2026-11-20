@@ -88,28 +88,18 @@ models:
     ollama_model: "gemma4:26b-a4b-it-q4_K_M"
     sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
     ctx_size: 32768
-  # The same Gemma 4 files under the names the GGUF metadata gives them; llama.cpp
-  # can't load Ollama's gemma4 format, so these route to Ollama too.
+  # The same Gemma 4 files under the names their GGUF metadata gives them. llama.cpp
+  # can't load Ollama's gemma4 format; the 31b and 26b-a4b files are served above (via
+  # Ollama) under their gemma4-<size>-it-<quant> names, so these aren't served at all.
   gemma4-31.3b-q4_k_m:
-    backend: ollama
-    ollama_model: "gemma4:31b-it-q4_K_M"
-    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
-    ctx_size: 131072
+    skip: true
   gemma4-31.3b-q8_0:
-    backend: ollama
-    ollama_model: "gemma4:31b-it-q8_0"
-    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
-    ctx_size: 131072
+    skip: true
   gemma4-25.8b-q8_0:
-    backend: ollama
-    ollama_model: "gemma4:26b-a4b-it-q8_0"
-    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
-    ctx_size: 131072
+    skip: true
   gemma4-25.8b-q4_k_m:
-    backend: ollama
-    ollama_model: "gemma4:26b-a4b-it-q4_K_M"
-    sampler_args: --temp 1.0 --top-p 0.95 --top-k 64
-    ctx_size: 32768
+    skip: true
+  # e4b and e2b have no other name; route them to Ollama under these.
   gemma4-8.0b-q4_k_m:
     backend: ollama
     ollama_model: "gemma4:e4b"
@@ -144,33 +134,35 @@ models:
     chat_template_kwargs: '{"enable_thinking": false}'
     sampler_args: --temp 0.6 --top-p 0.95 --top-k 40 --repeat-penalty 1.05
     ctx_size: 32768
-  # Qwen3.5/3.6 models - routed to Ollama (llama.cpp doesn't support qwen35/36 arch yet)
+  # Qwen3.5/3.6. Ollama ships the q8_0 tags as manifest lists with a llama.cpp variant,
+  # which llama-swap serves under the GGUF names below; the q4_K_M tags exist only in
+  # Ollama's format and route to Ollama.
   # Sampler: adaptive top-p + min-p (no top-k)
   # Qwen3.6: preserve_thinking=true fixes KV cache invalidation from prior-turn reasoning blocks
+  qwen3.5-9.0b-q8_0:
+    jinja: true
+    sampler_args: --temp 0.7 --top-p 0.95 --min-p 0.01 --repeat-penalty 1.05
+    ctx_size: 131072
+  qwen3.5-4.2b-q8_0:
+    jinja: true
+    sampler_args: --temp 0.7 --top-p 0.95 --min-p 0.01 --repeat-penalty 1.05
+    ctx_size: 131072
+  qwen3.5-1.9b-q8_0:
+    jinja: true
+    sampler_args: --temp 0.7 --top-p 0.95 --min-p 0.01 --repeat-penalty 1.05
+    ctx_size: 131072
+  qwen3.5-752.39m-q8_0:
+    jinja: true
+    sampler_args: --temp 0.7 --top-p 0.95 --min-p 0.01 --repeat-penalty 1.05
+    ctx_size: 131072
+  qwen3.6-35.5b-q8_0:
+    jinja: true
+    chat_template_kwargs: '{"preserve_thinking": true}'
+    sampler_args: --temp 0.7 --top-p 0.95 --min-p 0.01 --repeat-penalty 1.05
+    ctx_size: 131072
   qwen3.5-9.7b-q4_k_m:
     backend: ollama
     ollama_model: "qwen3.5:9b-q4_K_M"
-    sampler_args: --temp 0.7 --top-p 0.95 --min-p 0.01 --repeat-penalty 1.05
-    ctx_size: 131072
-  qwen3.5-9.7b-q8_0:
-    backend: ollama
-    ollama_model: "qwen3.5:9b-q8_0"
-    sampler_args: --temp 0.7 --top-p 0.95 --min-p 0.01 --repeat-penalty 1.05
-    ctx_size: 131072
-  qwen3.5-4.7b-q8_0:
-    backend: ollama
-    ollama_model: "qwen3.5:4b-q8_0"
-    sampler_args: --temp 0.7 --top-p 0.95 --min-p 0.01 --repeat-penalty 1.05
-    ctx_size: 131072
-  qwen3.5-2.3b-q8_0:
-    backend: ollama
-    ollama_model: "qwen3.5:2b-q8_0"
-    sampler_args: --temp 0.7 --top-p 0.95 --min-p 0.01 --repeat-penalty 1.05
-    ctx_size: 131072
-  qwen3.6-36.0b-q8_0:
-    backend: ollama
-    ollama_model: "qwen3.6:35b-a3b-q8_0"
-    chat_template_kwargs: '{"preserve_thinking": true}'
     sampler_args: --temp 0.7 --top-p 0.95 --min-p 0.01 --repeat-penalty 1.05
     ctx_size: 131072
   # Qwable-v1: Qwen3.6-35B-A3B finetune - same arch, must route to Ollama
@@ -180,11 +172,6 @@ models:
     ollama_model: "hf.co/lordx64/Qwable-v1-GGUF:Q8_0"
     chat_template_kwargs: '{"preserve_thinking": true}'
     sampler_args: --temp 0.6 --top-p 0.9 --min-p 0.01 --repeat-penalty 1.05
-    ctx_size: 131072
-  qwen3.5-873.44m-q8_0:
-    backend: ollama
-    ollama_model: "qwen3.5:0.8b-q8_0"
-    sampler_args: --temp 0.7 --top-p 0.95 --min-p 0.01 --repeat-penalty 1.05
     ctx_size: 131072
   # A candidate for RustyMail's triage second pass (with think:false): one shared
   # 32768 context, as for gemma4-26b-a4b-it-q4_k_m, so callers don't force reloads.
