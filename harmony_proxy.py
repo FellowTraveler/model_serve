@@ -22,7 +22,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 
 from decision_route import create_decision_router
 from request_log import RequestLogger
-from ollama_routed_models import installed_ollama_tags, merge_model_lists, ollama_routed_model_entries
+from ollama_routed_models import installed_ollama_models, merge_model_lists, ollama_routed_model_entries
 
 # Configure logging
 logging.basicConfig(
@@ -1716,7 +1716,7 @@ async def list_models():
         try:
             tags = await client.get(f"{OLLAMA_BASE}/api/tags")
             tags.raise_for_status()
-            installed = installed_ollama_tags(tags.json())
+            installed = installed_ollama_models(tags.json())
         except (httpx.HTTPError, ValueError) as e:
             logger.warning(f"Ollama model list unavailable, listing llama-swap models only: {e}")
             return json_response_from_backend(resp)
