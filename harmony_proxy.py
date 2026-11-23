@@ -994,12 +994,54 @@ REQUEST_SAMPLING_OPTIONS = (
 )
 
 
+def ollama_messages(messages: list) -> list:
+    """OpenAI chat messages -> Ollama /api/chat messages (copies; the input is unchanged).
+
+    OpenAI clients send an assistant message's tool_calls[].function.arguments as a JSON
+    string; Ollama's native API requires an object and rejects the whole request (400)
+    otherwise. Arguments that aren't valid JSON are passed on as sent, so Ollama's own
+    error reaches the client. Everything else, including role "tool" results, is unchanged.
+    """
+    converted = []
+    for message in messages:
+        if message.get("role") == "assistant" and message.get("tool_calls"):
+            message = {**message, "tool_calls": [ollama_tool_call(tc) for tc in message["tool_calls"]]}
+        converted.append(message)
+    return converted
+
+
+def ollama_tool_call(tool_call: dict) -> dict:
+    function = tool_call.get("function") or {}
+    arguments = function.get("arguments")
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments) if arguments.strip() else {}
+        except json.JSONDecodeError:
+            return tool_call
+        return {**tool_call, "function": {**function, "arguments": arguments}}
+    return tool_call
+
+
+def ollama_error_response(status_code: int, raw_body: bytes) -> JSONResponse:
+    """Ollama's error, passed on with its status instead of an empty 200 reply."""
+    text = raw_body.decode("utf-8", errors="replace")
+    try:
+        detail = json.loads(text).get("error") or text
+    except (json.JSONDecodeError, AttributeError):
+        detail = text
+    logger.warning(f"Ollama returned {status_code}: {detail[:300]}")
+    return JSONResponse(
+        content={"error": {"message": f"Ollama: {detail}", "type": "upstream_error"}},
+        status_code=status_code,
+    )
+
+
 def build_ollama_chat_body(body: dict, stream: bool) -> dict:
     """Translate an OpenAI chat request into an Ollama native /api/chat request."""
     model = body.get("model", "")
     ollama_body = {
         "model": get_ollama_model_name(model),
-        "messages": body.get("messages", []),
+        "messages": ollama_messages(body.get("messages", [])),
         "stream": stream,
         "think": False,
         "keep_alive": OLLAMA_KEEP_ALIVE_SECONDS,
@@ -1076,36 +1118,50 @@ async def handle_ollama_chat(body: dict, stream: bool):
         return f"data: {data}\n\n"
 
     if stream:
+        # Open the stream before answering, so an Ollama error can still be
+        # returned with its own status instead of an empty 200 event stream.
+        client = httpx.AsyncClient(timeout=None)
+        resp = await client.send(client.build_request("POST", url, json=ollama_body), stream=True)
+        if resp.status_code != 200:
+            raw_error = await resp.aread()
+            await resp.aclose()
+            await client.aclose()
+            return ollama_error_response(resp.status_code, raw_error)
+
         async def iter_sse():
             tool_call_count = 0
-            async with httpx.AsyncClient(timeout=None) as client:
-                async with client.stream("POST", url, json=ollama_body, timeout=None) as resp:
-                    async for line in resp.aiter_lines():
-                        if not line:
-                            continue
-                        try:
-                            chunk = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
+            try:
+                async for line in resp.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
 
-                        msg = chunk.get("message", {})
-                        content = msg.get("content", "")
+                    msg = chunk.get("message", {})
+                    content = msg.get("content", "")
 
-                        if msg.get("tool_calls"):
-                            # Ollama sends each tool call whole, in one chunk
-                            deltas = openai_tool_calls(msg["tool_calls"], first_index=tool_call_count)
-                            tool_call_count += len(deltas)
-                            yield sse_chunk({"tool_calls": deltas}, None)
-                        if content:
-                            yield sse_chunk({"content": content}, None)
-                        if chunk.get("done", False):
-                            yield sse_chunk({}, "tool_calls" if tool_call_count else "stop")
-                            yield "data: [DONE]\n\n"
+                    if msg.get("tool_calls"):
+                        # Ollama sends each tool call whole, in one chunk
+                        deltas = openai_tool_calls(msg["tool_calls"], first_index=tool_call_count)
+                        tool_call_count += len(deltas)
+                        yield sse_chunk({"tool_calls": deltas}, None)
+                    if content:
+                        yield sse_chunk({"content": content}, None)
+                    if chunk.get("done", False):
+                        yield sse_chunk({}, "tool_calls" if tool_call_count else "stop")
+                        yield "data: [DONE]\n\n"
+            finally:
+                await resp.aclose()
+                await client.aclose()
         return StreamingResponse(iter_sse(), media_type="text/event-stream")
     else:
         async with httpx.AsyncClient(timeout=None) as client:
             resp = await client.post(url, json=ollama_body, timeout=None)
-            data = resp.json()
+        if resp.status_code != 200:
+            return ollama_error_response(resp.status_code, resp.content)
+        data = resp.json()
 
         msg = data.get("message", {})
         prompt_tokens = data.get("prompt_eval_count", 0)
