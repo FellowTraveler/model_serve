@@ -55,7 +55,7 @@ Client (port 5846)
 ```
 
 **Key files:**
-- `harmony_proxy.py` — the main proxy (64KB, handles routing, Harmony encode/decode, streaming, tool calls)
+- `harmony_proxy.py` — the main proxy (routing, Harmony encode/decode, Ollama request/response translation, streaming, tool calls)
 - `generate_config.py` — scans `MODELS_DIR/ollama/` for GGUF files, merges `custom_models.yaml`, writes `config.yaml`
 - `pressure_unloader.py` — background daemon; polls llama-swap `/running` and Ollama `/api/ps`; evicts LRU idle model when memory exceeds threshold
 - `model` — CLI script (Python); wraps ollama pull/rm, triggers sync, controls services
